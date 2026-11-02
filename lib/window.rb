@@ -6,6 +6,7 @@ require_relative "canvas"
 require_relative "data"
 require_relative "item_box"
 require_relative "main_sidebar_page"
+require_relative "math_parser"
 require_relative "utilities"
 
 module Graphs
@@ -89,7 +90,7 @@ module Graphs
     def header_bar = @header_bar ||= Adwaita::HeaderBar.new
     def content_title = @content_title ||= Adwaita::WindowTitle.new("Graphs", "")
     def toast_overlay = @toast_overlay ||= Adwaita::ToastOverlay.new
-    def main_page = @main_page ||= MainSidebarPage.new
+    def main_page = @main_page ||= MainSidebarPage.new(window: self)
     def canvas = @canvas ||= Canvas.new(data: @data)
 
     def sidebar_button
@@ -138,13 +139,30 @@ module Graphs
     def mode=(value)
       main_page.mode = value
       canvas.mode = value
+      main_page.operations.on_mode_change
     end
+
+    # The value one of the Modify entries holds, which is what upstream's
+    # `get_operation_value` evaluates.
+    def operation_value(name) = Graphs.evaluate_string(main_page.operations.entry_text(name))
 
     # Section toasts
 
     def add_toast(toast) = toast_overlay.add_toast(toast)
 
     def add_toast_string(title) = add_toast(Adwaita::Toast.new(title))
+
+    # A toast that offers to open the folder the file was written to, as
+    # upstream's `add_toast_string_with_file` does.
+    def add_toast_string_with_file(title, file)
+      Actions.add_action(window, "open-file-location") { Tools.open_file_location(file) }
+      add_toast(
+        Adwaita::Toast.new(title).tap do |toast|
+          toast.button_label = "Open Location"
+          toast.action_name = "win.open-file-location"
+        end,
+      )
+    end
 
     def add_undo_toast(title)
       add_toast(
@@ -191,8 +209,19 @@ module Graphs
       canvas.queue_draw
     end
 
+    # What the operations and the actions on items can act on: whether
+    # anything is selected, and whether any of it is a dataset.
     def on_selection_changed
-      set_action_enabled("delete-selected", @data.any? { |item| item.selected })
+      items_selected = @data.any? { |item| item.selected }
+      data_items_selected = @data.any? { |item| item.selected && item.is_a?(DataItem) }
+      set_action_enabled("delete-selected", items_selected)
+      set_action_enabled("export-data", items_selected)
+      main_page.operations.tap do |operations|
+        operations.set_items_sensitivity(items_selected)
+        operations.set_data_items_sensitivity(data_items_selected)
+        operations.set_entry_sensitivity(items_selected)
+        operations.set_cut_sensitivity(data_items_selected && mode == :select)
+      end
       canvas.queue_draw
     end
 

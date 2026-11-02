@@ -2,15 +2,16 @@
 
 require "adwaita"
 require_relative "enums"
+require_relative "operations_panel"
 
 module Graphs
   # Ported from upstream's graphs/sidebar/main.vala and
   # data/ui/sidebar/main.blp: the sidebar's first page, with the item list,
   # the application menus and the three mode buttons.
   #
-  # Upstream's page also holds the operations panel and a figure settings
-  # button; both belong to components this port has not written yet, so the
-  # page carries what it can reach.
+  # The page also holds the operations panel, below the mode buttons; the
+  # figure settings button upstream puts in the header belongs to a page this
+  # port has not written yet, so the header carries what it can reach.
   class MainSidebarPage
     MODE_BUTTONS = {
       pan:    ["move-tool-symbolic", "Pan Mode. Click and drag to pan"],
@@ -18,7 +19,8 @@ module Graphs
       select: ["edit-select-all-symbolic", "Select Mode. Click and drag to make a selection of data"],
     }.freeze
 
-    def initialize(title: "Graphs")
+    def initialize(window:, title: "Graphs")
+      @window = window
       @title = title
     end
 
@@ -26,7 +28,9 @@ module Graphs
       page.tap do
         toolbar_view.tap do |view|
           view.add_top_bar(header_bar)
-          view.content = content_box
+          view.content = scrolled_window
+
+          scrolled_window.child = content_box
         end
 
         header_bar.tap do |bar|
@@ -39,6 +43,7 @@ module Graphs
           box.append(Gtk::Separator.new(:horizontal))
           box.append(mode_box)
           box.append(Gtk::Separator.new(:horizontal))
+          box.append(operations_bin)
 
           item_stack.tap do |stack|
             stack.add_named(empty_page, "empty")
@@ -52,6 +57,8 @@ module Graphs
           mode_box.tap do |modes|
             MODE_BUTTONS.each_key { |mode| modes.append(mode_button(mode)) }
           end
+
+          operations_bin.child = operations.build
         end
       end
     end
@@ -94,6 +101,11 @@ module Graphs
       end
     end
 
+    # The operations panel sits at the bottom of the sidebar, below the mode
+    # buttons, as upstream's `operations_bin` holds it.
+    def operations = @operations ||= OperationsPanel.new(window: @window)
+    def operations_bin = @operations_bin ||= Adwaita::Bin.new
+
     def page = @page ||= Adwaita::NavigationPage.new(toolbar_view, @title)
     def toolbar_view = @toolbar_view ||= Adwaita::ToolbarView.new
     def header_bar = @header_bar ||= Adwaita::HeaderBar.new
@@ -102,6 +114,14 @@ module Graphs
     def content_box
       @content_box ||= Gtk::Box.new(:vertical, 0).tap do |box|
         box.vexpand = true
+      end
+    end
+
+    def scrolled_window
+      @scrolled_window ||= Gtk::ScrolledWindow.new.tap do |scroll|
+        scroll.vexpand = true
+        scroll.hexpand = true
+        scroll.hscrollbar_policy = :never
       end
     end
 
@@ -178,6 +198,8 @@ module Graphs
     def add_data_menu
       @add_data_menu ||= Gio::Menu.new.tap do |menu|
         menu.append("Add Equation…", "win.add-equation")
+        menu.append("Add Fill…", "win.add-fill")
+        menu.append("Generate Data…", "win.generate-data")
       end
     end
 
@@ -185,6 +207,11 @@ module Graphs
       @primary_menu ||= Gio::Menu.new.tap do |menu|
         Gio::Menu.new.tap do |section|
           section.append("New Project", "app.new-window")
+          menu.append_section(nil, section)
+        end
+        Gio::Menu.new.tap do |section|
+          section.append("Export Data…", "win.export-data")
+          section.append("Export Figure…", "win.export-figure")
           menu.append_section(nil, section)
         end
         Gio::Menu.new.tap do |section|

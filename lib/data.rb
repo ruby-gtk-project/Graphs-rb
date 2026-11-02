@@ -468,6 +468,9 @@ module Graphs
 
       def remove_item(position)
         disconnect_from_item(@items[position])
+        if @items[position].respond_to?(:detach)
+          @items[position].detach
+        end
         @items.delete_at(position)
       end
 
@@ -680,7 +683,15 @@ module Graphs
         @figure_settings_copy = figure_settings.to_h
       end
 
-      def to_dict(item) = ItemFactory.to_dict(item)
+      # An item that depends on another stores that dependency as a position,
+      # which `ItemFactory.link_dependencies` puts in.
+      def to_dict(item)
+        ItemFactory.link_dependencies(
+          item,
+          ItemFactory.to_dict(item),
+          @items,
+        )
+      end
 
       def record(change_type, change)
         @current_batch << [change_type, change]
@@ -802,16 +813,28 @@ module Graphs
         if direction == :undo
           remove_item(@items.length - 1)
         else
-          insert_item(ItemFactory.new_from_dict(change), @items.length)
+          insert_item(item_from_dict(change, @items.length), @items.length)
         end
       end
 
       def apply_item_removed(change, direction)
         position, dictionary = change
         if direction == :undo
-          insert_item(ItemFactory.new_from_dict(dictionary), position)
+          insert_item(item_from_dict(dictionary, position), position)
         else
           remove_item(position)
+        end
+      end
+
+      # The item as it was, with its dependencies resolved against the list it
+      # is about to be part of.
+      def item_from_dict(dictionary, position)
+        ItemFactory.new_from_dict(dictionary).tap do |item|
+          ItemFactory.resolve_dependencies(
+            item,
+            dictionary,
+            @items.dup.insert(position, item),
+          )
         end
       end
 

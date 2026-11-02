@@ -3,6 +3,7 @@
 require "adwaita"
 require_relative "enums"
 require_relative "item/factory"
+require_relative "item/fill_item"
 require_relative "properties"
 require_relative "utilities"
 
@@ -99,6 +100,21 @@ module Graphs
       end
     end
 
+    # Draws the figure into any Cairo context at a size of its own, which is
+    # how the figure is written to a file. The on-screen size is put back
+    # afterwards, so the pointer maths keeps working while the export runs.
+    def draw_to(context, width, height, transparent = false)
+      [@width, @height].then do |size|
+        draw(
+          context,
+          width,
+          height,
+          transparent,
+        )
+        @width, @height = size
+      end
+    end
+
     def figure_settings = @data.figure_settings
 
     def style_params = @data.selected_style_params
@@ -121,17 +137,19 @@ module Graphs
 
       # Section drawing
 
-      def draw(context, width, height)
+      def draw(context, width, height, transparent = false)
         @width = width.to_f
         @height = height.to_f
-        fill(
-          context,
-          0,
-          0,
-          @width,
-          @height,
-          style_params.outline_color,
-        )
+        unless transparent
+          fill(
+            context,
+            0,
+            0,
+            @width,
+            @height,
+            style_params.outline_color,
+          )
+        end
         plot_area.then do |left, top, right, bottom|
           fill(
             context,
@@ -640,7 +658,9 @@ module Graphs
       end
 
       def draw_item(context, item)
-        if item.is_a?(DataItem)
+        if item.is_a?(FillItem)
+          draw_fill_item(context, item)
+        elsif item.is_a?(DataItem)
           draw_data_item(context, item)
         elsif item.is_a?(EquationItem)
           draw_equation_item(context, item)
@@ -707,6 +727,79 @@ module Graphs
           line_style_index(item),
           item.linewidth,
         )
+      end
+
+      # The area between a fill's two bounds. A fill that follows no dataset
+      # has no x values of its own, so it is sampled across the visible range,
+      # as upstream's artist does on every view change.
+      def draw_fill_item(context, item)
+        fill_values(item).then do |values|
+          fill_polygon(item, values).then do |points|
+            unless points.length < 3
+              set_color(context, item.color, item.alpha)
+              context.move_to(*points.first)
+              points.drop(1).each { |point| context.line_to(*point) }
+              context.close_path
+              context.fill
+            end
+          end
+        end
+      end
+
+      def fill_values(item)
+        if item.view_based?
+          sampled_fill(item)
+        else
+          [item.data.xdata, item.data.lower, item.data.upper]
+        end
+      end
+
+      def sampled_fill(item)
+        left, _top, right, _bottom = plot_area
+        count = [(right - left).to_i, 2].max
+        Array.new(count) { |step| x_value(left + step, item.xposition) }.then do |xdata|
+          item.evaluate_bounds(xdata).then do |lower, upper|
+            [xdata, lower, upper]
+          end
+        end
+      end
+
+      # The outline of the filled area: along the lower bound and back along
+      # the upper one. A point whose bounds are undefined is left out.
+      def fill_polygon(item, values)
+        xdata, lower, upper = values
+        clamped_lower = clamp_fill(lower, item.yposition)
+        clamped_upper = clamp_fill(upper, item.yposition)
+        kept = xdata.each_index.select do |index|
+          usable_fill_point?(xdata[index], clamped_lower[index], clamped_upper[index])
+        end
+        kept.filter_map { |index| data_point(xdata[index], clamped_lower[index], item) } +
+          kept.reverse.filter_map { |index| data_point(xdata[index], clamped_upper[index], item) }
+      end
+
+      def usable_fill_point?(x, lower, upper)
+        !x.nil? && !lower.nil? && !upper.nil? &&
+          x.finite? && !lower.nan? && !upper.nan?
+      end
+
+      # An infinite bound is resolved to one figure height beyond the visible
+      # area, which is what upstream's clamp does.
+      def clamp_fill(values, direction)
+        limits_for(direction).then do |minimum, maximum|
+          (maximum - minimum).then do |span|
+            values.map { |value| clamped_bound(value, minimum - span, maximum + span) }
+          end
+        end
+      end
+
+      def clamped_bound(value, low, high)
+        if value.nan? || value.finite?
+          value
+        elsif value.positive?
+          high
+        else
+          low
+        end
       end
 
       def draw_text_item(context, item)
@@ -1069,14 +1162,7 @@ module Graphs
 
       def draw_legend_entry(context, item, x, y)
         baseline = y + legend_line_height(context) - 4
-        draw_line(
-          context,
-          [[x + 6, baseline - 4], [x + 34, baseline - 4]],
-          item.color,
-          item.alpha,
-          line_style_index(item),
-          legend_linewidth(item),
-        )
+        draw_legend_sample(context, item, [x, baseline])
         set_color(context, style_params.text_color, 1.0)
         show_text_at(
           context,
@@ -1084,6 +1170,30 @@ module Graphs
           x + 40,
           baseline,
         )
+      end
+
+      # A fill has no line, so it is shown as a patch of its own colour.
+      def draw_legend_sample(context, item, position)
+        x, baseline = position
+        if item.is_a?(FillItem)
+          set_color(context, item.color, item.alpha)
+          context.rectangle(
+            x + 6,
+            baseline - 12,
+            28,
+            12,
+          )
+          context.fill
+        else
+          draw_line(
+            context,
+            [[x + 6, baseline - 4], [x + 34, baseline - 4]],
+            item.color,
+            item.alpha,
+            line_style_index(item),
+            legend_linewidth(item),
+          )
+        end
       end
 
       # An equation item has no "none" line style, so its index counts from

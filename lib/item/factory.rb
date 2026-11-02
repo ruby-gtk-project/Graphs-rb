@@ -4,6 +4,7 @@ require_relative "base"
 require_relative "data_holder"
 require_relative "data_item"
 require_relative "equation_item"
+require_relative "fill_item"
 require_relative "generated_data_item"
 require_relative "text_item"
 require_relative "../math_parser"
@@ -45,6 +46,7 @@ module Graphs
       "GeneratedDataItem" => GeneratedDataItem,
       "EquationItem"      => EquationItem,
       "TextItem"          => TextItem,
+      "FillItem"          => FillItem,
     }.freeze
 
     module_function
@@ -77,6 +79,20 @@ module Graphs
     def new_equation_item(parameters, equation)
       EquationItem.new(equation: equation).tap do |item|
         item.name = "Y = #{Graphs.ast_to_expression(equation)}"
+        override_item(item, parameters)
+      end
+    end
+
+    # A fill starts out empty: its values follow from the bounds the dialog
+    # sets on it.
+    def new_fill_item(parameters, xdata = [], lower = [], upper = [])
+      FillItem.new(
+        data: FillHolder.new(
+          xdata,
+          lower,
+          upper,
+        ),
+      ).tap do |item|
         override_item(item, parameters)
       end
     end
@@ -154,13 +170,73 @@ module Graphs
         if item.equation_based?
           dictionary[:equation] = item.equation_string
         end
+        if item.is_a?(FillItem)
+          dictionary[:upper_equation] = expression_or_nil(item.get_upper_equation)
+          dictionary[:lower_equation] = expression_or_nil(item.get_lower_equation)
+        end
+      end
+    end
+
+    def expression_or_nil(equation)
+      unless equation.nil?
+        Graphs.ast_to_expression(equation)
+      end
+    end
+
+    # A bound that follows another item is stored as that item's position, so
+    # the reference survives a round trip through a project file or the undo
+    # history.
+    def link_dependencies(item, dictionary, items)
+      dictionary.tap do |linked|
+        if item.is_a?(FillItem)
+          linked[:upper_source] = items.index(item.get_upper_source)
+          linked[:lower_source] = items.index(item.get_lower_source)
+        end
+      end
+    end
+
+    def resolve_dependencies(item, dictionary, items)
+      item.tap do |resolved|
+        if resolved.is_a?(FillItem)
+          bind_source(
+            resolved,
+            dictionary[:upper_source],
+            items,
+            true,
+          )
+          bind_source(
+            resolved,
+            dictionary[:lower_source],
+            items,
+            false,
+          )
+        end
+      end
+    end
+
+    def bind_source(fill, position, items, upper)
+      unless position.nil? || position >= items.length
+        if upper
+          fill.set_upper_source(items[position])
+        else
+          fill.set_lower_source(items[position])
+        end
       end
     end
 
     def serialize_property(item, property)
       case Properties.normalize(property)
-      when :data then serialize_data(item.data)
+      when :data then serialize_holder(item)
+      when :equation then item.equation_string
       else item[property]
+      end
+    end
+
+    def serialize_holder(item)
+      if item.is_a?(FillItem)
+        [Array(item.data.xdata), Array(item.data.lower), Array(item.data.upper)]
+      else
+        serialize_data(item.data)
       end
     end
 
@@ -175,9 +251,17 @@ module Graphs
 
     def deserialize_property(item, property, value)
       case Properties.normalize(property)
-      when :data then item.data = DataHolder.new(*value)
+      when :data then item.data = holder_from(item, value)
       when :equation then item.equation = Graphs.expression_to_ast(value)
       else item[property] = value
+      end
+    end
+
+    def holder_from(item, value)
+      if item.is_a?(FillItem)
+        FillHolder.new(*value)
+      else
+        DataHolder.new(*value)
       end
     end
 
@@ -186,14 +270,30 @@ module Graphs
       type = TYPES.fetch(properties.delete(:type).to_s)
       equation = properties.delete(:equation)
       data = properties.delete(:data)
+      bounds = [properties.delete(:upper_equation), properties.delete(:lower_equation)]
+      properties.delete(:upper_source)
+      properties.delete(:lower_source)
       type.new.tap do |item|
         item.set_properties(properties)
         unless data.nil?
-          item.data = DataHolder.new(*data)
+          item.data = holder_from(item, data)
         end
         unless equation.nil?
           item.equation = Graphs.expression_to_ast(equation)
         end
+        if item.is_a?(FillItem)
+          restore_bounds(item, bounds)
+        end
+      end
+    end
+
+    def restore_bounds(item, bounds)
+      upper, lower = bounds
+      unless upper.nil?
+        item.set_upper_equation(Graphs.expression_to_ast(upper))
+      end
+      unless lower.nil?
+        item.set_lower_equation(Graphs.expression_to_ast(lower))
       end
     end
   end

@@ -12,17 +12,98 @@ Port layout follows the pilot (`gnome-contacts-rb`): flat `lib/<thing>.rb`
 with `lib/graphs/application.rb` for the application object and `lib/graphs.rb`
 as the entry require.
 
-## What `lib/` on `ruby` has today
+## Port status on `ruby` (re-checked at survey time)
 
-| File | State |
-|---|---|
-| `lib/graphs.rb` | requires `graphs/application` only |
-| `lib/graphs/application.rb` | placeholder `Gtk::Application` + `Adwaita::ApplicationWindow` showing a StatusPage reading "The Ruby port has not been written yet." |
-| `lib/graphs/rb/version.rb` | gem version constant |
+`lib/` now holds 36 files. The models, the math parser, the canvas and the
+first slice of the window chrome are written; everything else below is still
+missing. Presence here means *a `lib/*.rb` file exists for that component* —
+not that it is at parity.
 
-So **every user-facing component below is missing.** The port is at zero
-parity; `application.rb` exists but implements none of upstream's actions,
-accelerators, About dialog, window factory or style-editor factory.
+### UI components — 49 in all, 10 present
+
+| Upstream | → `lib/` | Kind | Present |
+|---|---|---|:-:|
+| `graphs/application.vala` | `graphs/application.rb` | application | yes |
+| `graphs/actions.vala` | `actions.rb` | actions | yes |
+| `graphs/window.vala` + `window.blp` | `window.rb` | window | yes |
+| `data/ui/window-shortcuts.blp` | `shortcuts_dialog.rb` | shortcuts dialog | yes |
+| `graphs/sidebar/main.vala` + `sidebar/main.blp` | `main_sidebar_page.rb` | navigation page | yes |
+| `graphs/item_box.vala` + `item-box.blp` | `item_box.rb` | list row | yes |
+| `graphs/sidebar/operations.vala` + `sidebar/operations.blp` | `operations_panel.rb` | panel | no |
+| `graphs/sidebar/edit_item/page.vala` + `edit-item/page.blp` | `edit_item_page.rb` | navigation page | no |
+| `graphs/sidebar/edit_item/base_box.vala` + `base.blp` | `edit_item_base_box.rb` | preferences box | no |
+| `graphs/sidebar/edit_item/data_box.vala` + `data.blp` | `edit_item_data_box.rb` | preferences box | no |
+| `graphs/sidebar/edit_item/equation_group.vala` + `equation-group.blp` | `edit_item_equation_group.rb` | preferences group | no |
+| `graphs/sidebar/edit_item/equation_box.vala` + `equation.blp` | `edit_item_equation_box.rb` | preferences box | no |
+| `graphs/sidebar/edit_item/generated_data_box.vala` + `generated-data.blp` | `edit_item_generated_data_box.rb` | preferences box | no |
+| `graphs/sidebar/edit_item/fill_box.vala` + `fill.blp` | `edit_item_fill_box.rb` | preferences box | no |
+| `graphs/sidebar/edit_item/errorbar_group.vala` + `errorbar-group.blp` | `edit_item_errorbar_group.rb` | preferences group | no |
+| `graphs/sidebar/figure_settings.vala` (`FigureSettingsPage`) + `settings-page.blp` | `figure_settings_page.rb` | navigation page | no |
+| `graphs/sidebar/figure_settings.vala` (`StylePage`) + `style-page.blp` | `style_page.rb` | navigation page | no |
+| `graphs/add_equation.vala` + `add-equation.blp` | `add_equation_dialog.rb` | dialog | yes |
+| `graphs/add_fill.vala` + `add-fill.blp` | `add_fill_dialog.rb` | dialog | no |
+| `graphs/generate_data.vala` + `generate-data.blp` | `generate_data_dialog.rb` | dialog | no |
+| `graphs/transform.vala` + `transform.blp` | `transform_dialog.rb` | dialog | no |
+| `graphs/export_figure.vala` + `export-figure.blp` | `export_figure_dialog.rb` | dialog | no |
+| `graphs/smoothen_settings.vala` + `smoothen-settings.blp` | `smoothen_dialog.rb` | dialog | no |
+| `graphs/curve_fitting.vala` + `curve-fitting.blp` | `curve_fitting_dialog.rb` | dialog | no |
+| `graphs/curve_fitting.vala` (`FittingParameterBox`) + `fitting-parameters.blp` | `fitting_parameter_box.rb` | widget | no |
+| `graphs/file_import/dialog.vala` (`ImportDialog`) + `import/dialog.blp` | `import_dialog.rb` | dialog | no |
+| `graphs/file_import/dialog.vala` (`ImportFileRow`) + `import/file-row.blp` | `import_file_row.rb` | list row | no |
+| `file_import/parsers/columns/ui.vala` + `import/columns/box.blp` | `columns_import_box.rb` | widget | no |
+| `file_import/parsers/columns/ui.vala` + `import/columns/main-group.blp` | `columns_import_group.rb` | preferences group | no |
+| `file_import/parsers/columns/ui.vala` + `import/columns/item-group.blp` | `columns_item_group.rb` | preferences group | no |
+| `file_import/parsers/spreadsheet/ui.vala` + `import/spreadsheet/box.blp` | `spreadsheet_import_box.rb` | widget | no |
+| `file_import/parsers/spreadsheet/ui.vala` + `import/spreadsheet/main-group.blp` | `spreadsheet_import_group.rb` | preferences group | no |
+| `file_import/parsers/spreadsheet/ui.vala` + `import/spreadsheet/item-group.blp` | `spreadsheet_item_group.rb` | preferences group | no |
+| `file_import/parsers/sql/ui.vala` + `import/sql/main-group.blp` | `sql_import_group.rb` | preferences group | no |
+| `graphs/style_editor/window.vala` + `style-editor/window.blp` | `style_editor_window.rb` | window | no |
+| `data/ui/style-editor/shortcuts.blp` | `style_editor_shortcuts_dialog.rb` | shortcuts dialog | no |
+| `graphs/style_editor/editor_box.vala` + `editor-box.blp` | `style_editor_box.rb` | preferences box | no |
+| `graphs/style_editor/color_group.vala` + `color-group.blp` | `style_color_group.rb` | preferences group | no |
+| `graphs/style_editor/item_color_row.vala` + `item-color-row.blp` | `style_item_color_row.rb` | list row | no |
+| `graphs/style_editor/add_style.vala` + `add-style.blp` | `add_style_dialog.rb` | dialog | no |
+| `graphs/color_button.vala` + `color-button.blp` | `color_button.rb` | widget | yes |
+| `graphs/color_row.vala` + `color-row.blp` | `color_row.rb` | list row | no |
+| `graphs/color_swatch.vala` (no `.blp`) | `color_swatch.rb` | widget | yes |
+| `graphs/styles.vala` (`StylePreview`) + `style-preview.blp` | `style_preview.rb` | widget | no |
+| `data/ui/dialogs/beta-disallowed.blp` | `alert_dialogs.rb` | alert dialog | no |
+| `data/ui/dialogs/delete-style.blp` | `alert_dialogs.rb` | alert dialog | no |
+| `data/ui/dialogs/invalid-project.blp` | `alert_dialogs.rb` | alert dialog | no |
+| `data/ui/dialogs/legacy-migration-disallowed.blp` | `alert_dialogs.rb` | alert dialog | no |
+| `data/ui/dialogs/reset-import-settings.blp` | `alert_dialogs.rb` | alert dialog | no |
+| `data/ui/dialogs/save-project-changes.blp` | `alert_dialogs.rb` | alert dialog | no |
+| `data/ui/dialogs/save-style-changes.blp` | `alert_dialogs.rb` | alert dialog | no |
+| `graphs/canvas/canvas.vala` + `canvas.py`/`figure.py`/`artist.py`/`scales.py` | `canvas.rb` | widget | yes |
+
+### Non-UI port units
+
+| Upstream | → `lib/` | Present |
+|---|---|:-:|
+| `graphs/data.vala` + `data.py` | `data.rb` | yes |
+| `graphs/figure_settings.vala` | `figure_settings.rb` | yes |
+| `graphs/item/*.vala` | `item/*.rb` (`base`, `data_item`, `data_holder`, `equation_item`, `generated_data_item`, `text_item`, `factory`) | yes — `fill_item.vala` has no `lib/item/fill_item.rb` |
+| `graphs/styles.vala` + `styles.py` + `style_io.py` | `styles.rb` | yes |
+| `graphs/misc.vala` | `enums.rb` | yes |
+| `graphs/math_parser/*.vala` + `array_evaluator.c` | `math_parser/*.rb` | yes |
+| `graphs/utilities.vala`/`.py`/`.c`, `math_utilities.vala` | `utilities.rb` | yes |
+| `data/se.sjoerd.Graphs.gschema.xml` | `settings.rb` | yes |
+| `data/style.css` | `style.css` | yes |
+| `graphs/operations.py` | `operations.rb` | no |
+| `graphs/project.vala` + `project.py` + `migrate.py` | `project.rb` | no |
+| `graphs/export_items.vala` | `export_items.rb` | no |
+| `graphs/file_import/file_import.vala`, `parsers/*/main.vala`, `parsers/*/reader.vala`, `xry/parser.vala`, `xrdml/__init__.py` | `file_import/*.rb` | no |
+| `graphs/curve_fitting.py` (the fitting maths) | `curve_fitting.rb` | no |
+| `data/icons/*.svg` (26 custom symbolics + the source SVG) | `data/icons/` | no — only `hicolor/` is present |
+| `data/styles/*.mplstyle` (17) | `data/styles/` | yes — all 17 copied |
+| `po/` (28 catalogues) | `po/` | no |
+| `help/C/*.page` (10 pages) | `help/` | no |
+| `graphs/managed_array.vala`, `bindings.vala`, `python_helper.vala`/`.py`, `config.vala.in`, `graphs.c` | — | n/a, Vala↔Python glue |
+
+The port also carries two files with no single upstream counterpart:
+`lib/properties.rb` (the GObject property/signal helper the house style uses in
+place of Vala's `[GtkChild]`/`notify`) and `lib/math_parser/functions.rb`
+(the function table split out of upstream's evaluator).
 
 ## Application and global actions
 
@@ -525,16 +606,17 @@ units in their own right.
 | `data/style.css` | `lib/style.css` (or inline provider) | `.blurred`, `.drag-overlay`, `.drag-overlay-status-page`, `.import-mode`, `.style-grid` |
 | `data/generate_gresource.py`, `data/meson.build`, `data/ui/meson.build` | — | GResource assembly; irrelevant to the port |
 | `data/icons/*.svg` (20 custom symbolics) | `data/icons/` | `shift-symbolic`, `normalize-symbolic`, `smoothen-symbolic`, `center-symbolic`, `derivative2-symbolic`, `integral-symbolic`, `fast-fourier-transform-symbolic`, `inverse-fast-fourier-transform-symbolic`, `transform-symbolic`, `horizontal-arrows-symbolic`, `vertical-arrows-symbolic`, `move-tool-symbolic`, `loupe-symbolic`, `settings-symbolic`, `list-compact-symbolic`, `history-undo-symbolic`, `info-symbolic`, `up-symbolic`, `down-symbolic`, `left-symbolic`, `right-symbolic`, `check-round-outline-whole-symbolic`, `image-print-symbolic`, `axes-one-quadrant-symbolic`, `function-third-order-symbolic`, `graph-symbolic` — all referenced by the widgets above and none of them stock Adwaita |
-| `data/styles/*.mplstyle` (18 files) | `data/styles/` | the bundled style list the style grid shows |
+| `data/styles/*.mplstyle` (17 files) | `data/styles/` | the bundled style list the style grid shows |
 | `po/` (28 catalogues + LINGUAS + POTFILES.in) | `po/` | translations; `POTFILES.in` lists every `.blp` and source file above, so it doubles as the component checklist |
 | `help/C/*.page` (10 pages) | `help/` | the user manual `app.help` opens |
 
 ## Totals
 
-- 38 widget component pairs (`.vala`/`.py` + `.blp`), of which 2 are
-  standalone `.blp` shortcut dialogs and 7 are standalone `.blp` alert dialogs
-  → **47 UI components**.
+- 49 blueprint roots: 39 `template` roots (each paired with a `.vala`/`.py`
+  class), 7 standalone `Adw.AlertDialog` objects and 2 standalone
+  `Adw.ShortcutsDialog` objects. Plus `graphs/color_swatch.vala`, which has no
+  `.blp` → **49 UI components** in the table above.
 - 2 windows, 12 dialogs, 6 navigation pages, 3 menu-bearing headers,
   9 primary/section menus, 29 + 7 shortcut entries, 5 CSS classes of our own,
   26 custom icons.
-- Present on `ruby`: **0**.
+- Present on `ruby`: **10 of 49** UI components, and 9 of the 18 non-UI units.

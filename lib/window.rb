@@ -7,6 +7,7 @@ require_relative "data"
 require_relative "item_box"
 require_relative "main_sidebar_page"
 require_relative "math_parser"
+require_relative "sidebar/edit_item/page"
 require_relative "utilities"
 
 module Graphs
@@ -35,6 +36,7 @@ module Graphs
 
           navigation_view.tap do |navigation|
             navigation.add(main_page.build)
+            navigation.add(edit_item_page.build)
           end
 
           content_view.tap do |content|
@@ -92,6 +94,7 @@ module Graphs
     def toast_overlay = @toast_overlay ||= Adwaita::ToastOverlay.new
     def main_page = @main_page ||= MainSidebarPage.new(window: self)
     def canvas = @canvas ||= Canvas.new(data: @data)
+    def edit_item_page = @edit_item_page ||= EditItem::Page.new(window: self)
 
     def sidebar_button
       @sidebar_button ||= Gtk::ToggleButton.new.tap do |button|
@@ -265,7 +268,7 @@ module Graphs
           window:      self,
           item:        item,
           index:       index,
-          on_activate: nil,
+          on_activate: ->(selected_item) { open_edit_item_page(selected_item) },
         ).tap do |row|
           main_page.item_list.append(row.build)
           row.setup_interactions
@@ -274,6 +277,11 @@ module Graphs
       end
 
       def item_rows = @item_rows ||= []
+
+      def open_edit_item_page(item)
+        edit_item_page.load_item(item)
+        navigation_view.push(edit_item_page.widget)
+      end
 
       def connect_data
         @data.connect_signal(:items_changed) { on_items_changed }

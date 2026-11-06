@@ -387,7 +387,9 @@ class DriveApplication < Graphs::Application
 end
 
 DriveApplication.new.run_checks do |window|
-  window.build
+  # create_main_window already calls window.build; building it again here
+  # double-appended every child widget and tripped GTK/Adwaita's
+  # "parent == NULL" assertions on every run.
   window.present
 
   check("window has an operations panel", window.main_page.operations.widget.is_a?(Gtk::Box), true)

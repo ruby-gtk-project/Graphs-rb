@@ -2,6 +2,8 @@
 
 require "adwaita"
 require_relative "color_button"
+require_relative "curve_fitting_dialog"
+require_relative "item/data_item"
 
 module Graphs
   # Ported from upstream's graphs/item_box.vala and data/ui/item-box.blp: one
@@ -48,6 +50,9 @@ module Graphs
         end
         if @index + 1 < @window.data.n_items
           group.add_action(move_down_action)
+        end
+        if @item.is_a?(DataItem)
+          group.add_action(curve_fitting_action)
         end
         row.insert_action_group("item_box", group)
       end
@@ -115,7 +120,18 @@ module Graphs
 
       def remove_section
         Gio::Menu.new.tap do |section|
+          if @item.is_a?(DataItem)
+            section.append("Curve Fitting", "item_box.curve_fitting")
+          end
           section.append("Remove Item", "item_box.delete")
+        end
+      end
+
+      def curve_fitting_action
+        Gio::SimpleAction.new("curve_fitting").tap do |action|
+          action.signal_connect("activate") do
+            CurveFittingDialog.new(window: @window, item: @item).present
+          end
         end
       end
 

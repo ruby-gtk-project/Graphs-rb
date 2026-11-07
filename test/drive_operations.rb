@@ -427,6 +427,34 @@ DriveApplication.new.run_checks do |window|
     check("#{name} alert builds", Graphs::AlertDialogs.build(name).is_a?(Adwaita::AlertDialog), true)
   end
 
+  # Curve fitting: fit the default linear preset against a y = 2x dataset,
+  # then confirm it and check the fitted curve and its confidence band both
+  # landed in the figure.
+  fit_item = dataset(window.data)
+  window.data.add_items([fit_item])
+  before_count = window.data.n_items
+  curve_dialog = Graphs::CurveFittingDialog.new(window: window, item: fit_item)
+  curve_dialog.build
+  check("curve fitting dialog builds", curve_dialog.dialog.is_a?(Adwaita::Dialog), true)
+  curve_dialog.fit_button.signal_emit("clicked")
+  check("curve fit confirm enabled", curve_dialog.confirm_button.sensitive?, true)
+  close_enough("curve fit slope", curve_dialog.fit_result.parameters[0], 2.0)
+  close_enough("curve fit intercept", curve_dialog.fit_result.parameters[1], 0.0)
+  curve_dialog.confirm_button.signal_emit("clicked")
+  check("curve fit added two items", window.data.n_items, before_count + 2)
+  check(
+    "curve fit item is an equation",
+    window.data.get_item(before_count).is_a?(Graphs::EquationItem),
+    true,
+  )
+  check(
+    "confidence band item is a fill",
+    window.data.get_item(before_count + 1).is_a?(Graphs::FillItem),
+    true,
+  )
+  # Leaves the item count as later checks expect it.
+  window.data.delete_items(window.data.items[before_count - 1..])
+
   # A fill of each kind in the figure, so the canvas draws both paths as the
   # figure is exported.
   Graphs::ItemFactory.new_fill_item(window.data.selected_style_params).tap do |following|

@@ -492,5 +492,101 @@ DriveApplication.new.run_checks do |window|
   end
 end
 
+# Ported from upstream's tests/test_operations.py: the same fixed XDATA/YDATA
+# arrays, run through DataOperations.callback (which stands in for upstream's
+# per-operation static methods, since this port dispatches by name rather
+# than exposing one method per operation) and checked against the same
+# properties the upstream tests assert.
+PROP_XDATA = [0.0, 1.0, 4.0, 5.0, 7.0, 8.0, 12.0, 3.0].freeze
+PROP_YDATA = [5.0, 2.0, 7.0, 1.0, 31.0, 5.0, 123.0, 156.0].freeze
+
+def op(name, xdata, ydata, *args)
+  Graphs::DataOperations.callback(nil, name, xdata, ydata, args)
+end
+
+# test_normalize: normalize scales ydata to a maximum value of 1.
+_, normalized_y, = op("normalize", PROP_XDATA, PROP_YDATA)
+check("normalize scales to a maximum of 1", normalized_y.max, 1.0)
+
+# test_translate_x: translate_x shifts all x values by the given offset.
+translated_x, = op("translate_x", PROP_XDATA, PROP_YDATA, 15.0)
+check(
+  "translate_x shifts every x value by the offset",
+  translated_x,
+  PROP_XDATA.map { |x| x + 15.0 },
+)
+
+# test_translate_y: translate_y shifts all y values by the given offset.
+_, translated_y, = op("translate_y", PROP_XDATA, PROP_YDATA, 15.0)
+check(
+  "translate_y shifts every y value by the offset",
+  translated_y,
+  PROP_YDATA.map { |y| y + 15.0 },
+)
+
+# test_multiply_x: multiply_x scales all x values by the given multiplier.
+multiplied_x, = op("multiply_x", PROP_XDATA, PROP_YDATA, 15.0)
+check(
+  "multiply_x scales every x value by the multiplier",
+  multiplied_x,
+  PROP_XDATA.map { |x| x * 15.0 },
+)
+
+# test_multiply_y: multiply_y scales all y values by the given multiplier.
+_, multiplied_y, = op("multiply_y", PROP_XDATA, PROP_YDATA, 15.0)
+check(
+  "multiply_y scales every y value by the multiplier",
+  multiplied_y,
+  PROP_YDATA.map { |y| y * 15.0 },
+)
+
+# test_center_at_maximum: center mode 0 places the x of the maximum y at zero.
+centered_on_max_x, = op("center", PROP_XDATA, PROP_YDATA, 0)
+max_y_index = PROP_YDATA.each_index.max_by { |index| PROP_YDATA[index] }
+check("center at maximum puts that x at zero", centered_on_max_x[max_y_index], 0.0)
+
+# test_center_at_middle: center mode 1 places the midpoint of the x range at zero.
+centered_on_middle_x, = op("center", PROP_XDATA, PROP_YDATA, 1)
+middle_value = (PROP_XDATA.min + PROP_XDATA.max) / 2.0
+check(
+  "center at middle shifts every x by the midpoint",
+  centered_on_middle_x,
+  PROP_XDATA.map { |x| x - middle_value },
+)
+
+# test_derivative: derivative returns the correct gradient at each point.
+derivative_x = [1.0, 2.0, 3.0, 4.0, 5.0]
+derivative_y = [5.0, 10.0, 15.0, 10.0, 5.0]
+_, derivative_result, = op("derivative", derivative_x, derivative_y)
+check("derivative keeps the input length", derivative_result.length, derivative_x.length)
+derivative_result.zip([5.0, 5.0, 0.0, -5.0, -5.0]).each_with_index do |(actual, expected), index|
+  close_enough("derivative value at index #{index}", actual, expected)
+end
+
+# test_integral: integral returns the correct cumulative area at each point.
+integral_x = [1.0, 2.0, 3.0, 4.0, 5.0]
+integral_y = [5.0, 10.0, 15.0, 10.0, 5.0]
+_, integral_result, = op("integral", integral_x, integral_y)
+check("integral keeps the input length", integral_result.length, integral_x.length)
+integral_result.zip([0.0, 7.5, 20.0, 32.5, 40.0]).each_with_index do |(actual, expected), index|
+  close_enough("integral value at index #{index}", actual, expected)
+end
+
+# test_cut_returns_none: cut hands back no x and y lists.
+cut_x, cut_y, = op("cut", PROP_XDATA, PROP_YDATA)
+check("cut returns no xdata", cut_x, nil)
+check("cut returns no ydata", cut_y, nil)
+
+# test_fft_output_length / test_inverse_fft_output_length: both transforms
+# return arrays of the same length as the input.
+fft_x = (0...8).map(&:to_f)
+fft_y = [0.0, 1.0, 0.0, -1.0, 0.0, 1.0, 0.0, -1.0]
+fft_new_x, fft_new_y, = op("fft", fft_x, fft_y)
+check("fft keeps the x length", fft_new_x.length, fft_x.length)
+check("fft keeps the y length", fft_new_y.length, fft_y.length)
+inverse_new_x, inverse_new_y, = op("inverse_fft", fft_x, fft_y)
+check("inverse_fft keeps the x length", inverse_new_x.length, fft_x.length)
+check("inverse_fft keeps the y length", inverse_new_y.length, fft_y.length)
+
 puts(FAILURES.empty? ? "DRIVE OK" : "DRIVE FAILED: #{FAILURES.join(', ')}")
 exit(FAILURES.empty? ? 0 : 1)

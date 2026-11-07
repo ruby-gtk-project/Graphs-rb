@@ -3,12 +3,18 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `fa994448` |
-| Port | `ruby` @ `8930c5e3` |
+| Port | `ruby` @ `42ff07f5` |
 | Upstream tests | **43** |
-| Ported (named, bijective) | **0** |
-| Gaps | **43** |
-| Test command advertised by the dev shell | `ruby -e 'require "rspec/core"; ...' spec` — **does not run** (see below) |
-| Drive scripts actually run | `xvfb-run ruby test/drive_{window,canvas,sidebar,operations}.rb` |
+| Ported (named or behaviourally bijective) | **18** (`spec/math_evaluation_spec.rb`, full bijection) |
+| Partially covered (file exists, behaviour overlaps, not a clean bijection) | **~2 of 6** (`spec/item_instantiation_spec.rb`) |
+| Gaps | **23 of 43** clean gaps, plus 4 partial-coverage gaps inside `item_instantiation_spec.rb` |
+| Both documented test commands | `bundle exec rspec spec` (via the dev-shell `rspec/core` one-liner) **runs and passes**; `xvfb-run ruby test/drive_{window,canvas,sidebar,operations}.rb` **runs and passes** |
+
+This report supersedes the prior round's `test-parity.md`, written against
+`8930c5e3` when `spec/` was unfilled `bundle gem` scaffolding and the
+advertised rspec command raised a `LoadError`. Both of those are now fixed
+(`8915152e`, "fix the false-green test harness bugs"); this is a fresh
+run against the current tree, not a copy-forward of stale numbers.
 
 ## 1. Upstream census
 
@@ -21,166 +27,131 @@ tests/test_operations.py          12 tests  (pytest def test_*)
 Total                             43 tests
 ```
 
-The Vala file's 18 `Test.add_func` registrations in `main()` were counted by
-hand and cross-checked against the 18 `private void test_*` definitions —
-they match 1:1, no loop-registered or variable-named cases. `tests/meson.build`
-registers one Vala test binary (`test_math_evaluation`) plus a `pytest` run
-over the whole `tests/` directory as a second meson `test()` — both are
-accounted for above; no third test entry point was found.
-
 ## 2. The bijection: upstream test → named port test
 
-| Upstream suite | Upstream count | Port test file | Port count | State |
+| Upstream suite | Count | Port file | Count | State |
 |---|---:|---|---:|---|
-| `/math-parser/eval/*` (18, `test_math_evaluation.vala`) | 18 | none | 0 | **43 gaps total, itemized below** |
-| `test_item_instantiation.py` | 6 | none | 0 | gap |
-| `test_migration.py` | 7 | none | 0 | gap |
-| `test_operations.py` | 12 | none | 0 | gap |
+| `test_math_evaluation.vala` | 18 | `spec/math_evaluation_spec.rb` | 18 | **Full bijection** — every one of upstream's 18 named cases (`basic-arithmetic`, `operator-precedence`, `power-associativity`, `unary-operators`, `factorial`, `implicit-multiplication`, `constants`, `trig-radians`, `trig-degrees`, `inverse-trig`, `misc-functions`, `nested-expressions`, `decimal-separator`, `division-by-zero`, `invalid-factorial-negative`, `invalid-factorial-fractional`, `operator-associativity`, `syntax-errors`) has a same-named Ruby `it` block. Ran this session: **18/18 pass.** This is real, named, ported test parity — the first clean one found in this port's history. |
+| `test_item_instantiation.py` | 6 | `spec/item_instantiation_spec.rb` | 6 | **Partial.** 6 `it` blocks exist but by different names than upstream's 6, and cover different ground than a 1:1 mapping would suggest (detail below). |
+| `test_migration.py` | 7 | — | 0 | **Gap, and untestable as things stand** — `graphs/migrate.py` has no port file (`component-identification.md`), and `tests/project_v1.graphs`, the fixture these 7 tests run against, was never copied into the port's `test/`. |
+| `test_operations.py` | 12 | — | 0 | **Gap** — `lib/operations.rb` exists and is exercised ad hoc by `test/drive_operations.rb`, but none of the 12 named upstream properties (`test_normalize`'s `max(ydata) == 1`, `test_derivative`, `test_fft_output_length`, etc.) has a same-named or property-matching Ruby assertion. |
 
-**Zero of the 43 upstream tests has a named Ruby counterpart.** The port has
-no `test_*` methods, no `it`/`describe` blocks, and no file structured to
-mirror `tests/test_math_evaluation.vala`, `test_item_instantiation.py`,
-`test_migration.py` or `test_operations.py`. This is the exact shape the
-`test-parity` skill's own worked example (planify-rb) warns about: a
-substantial, green, headless suite that was written from scratch against the
-port and pins none of what upstream pinned.
+### `item_instantiation_spec.rb` in detail — reading the file, not just counting `it`s
 
-In detail:
-
-- **Math evaluation (18 gaps).** The port's `drive_canvas.rb` *does* exercise
-  `Graphs.evaluate_string` with 8 expressions (`"2+3*4"`, `"2**3"`, `"2(3+4)"`,
-  `"pi"`, `"4!"`, `"3²"`, `"2--3"`, `"1.5e2"`) — real overlap in subject
-  matter with upstream's `test_basic_arithmetic`, `test_factorial`,
-  `test_implicit_multiplication`, `test_constants`. But none of upstream's
-  18 named cases is individually represented: there is no test for operator
-  precedence as its own case, none for power associativity, none for
-  degree-mode trig, none for the three division-by-zero/invalid-factorial
-  error cases, and critically **none for `test_syntax_errors`'s six invalid
-  expressions** (`""`, `"1+"`, `"(1+2"`, `"sin()"`, `"*2"`, `"2^^3"`) or for
-  `test_operator_associativity`'s ~35 assertions pinning the exact
-  precedence of `!` against `^` and unary minus. A parser bug in any of
-  those regions has no test in this repository that would catch it.
-- **Item instantiation (6 gaps).** Upstream pins `ItemFactory.new_from_dict`
-  for `DataItem`, `TextItem`, `FillItem` and the `ValueError` on an unknown
-  `type`. `lib/item/factory.rb` exists and the port's drive scripts construct
-  items, but never through a dict-deserialization path, and never assert the
-  unknown-type error. Grep confirms: no `new_from_dict` and no
-  `ItemFactory` call site in `test/` or `lib/` that takes a plain `Hash`.
-- **Migration (7 gaps).** `tests/test_migration.py` pins
-  `ProjectMigrator`/`ProjectValidator`/`read_project_file` against a real v1
-  project fixture (`tests/project_v1.graphs`, carried nowhere into the port).
-  `component-identification.md` already finds `graphs/migrate.py` and
-  `graphs/project.vala` entirely unported. These 7 tests cannot be ported
-  until that code exists — they are not just untested, they are untestable
-  in the port's current state. The fixture file itself was never copied into
-  the port's `test/`, so even starting this work has no input data yet.
-- **Operations (12 gaps).** `lib/operations.rb` exists and
-  `test/drive_operations.rb` does exercise several `DataOperations` methods
-  (grep shows normalize/translate/multiply/center-type calls), but through
-  the drive script's own ad hoc values, not through upstream's fixed
-  `XDATA`/`YDATA` arrays and not asserting the same per-operation properties
-  (e.g. upstream's `test_normalize` checks `max(ydata) == 1` specifically;
-  confirm the port's equivalent check does the same thing rather than a
-  nearby one). None of the 12 is named after its upstream counterpart, so
-  even where the behaviour might coincidentally be covered, it is not
-  **ported** by this skill's definition — a bijection requires a name, and
-  there is none.
-
-## 3. The runtime gate does not establish test parity, and partially cannot be trusted
-
-The task's runtime gate states `drive_ok=true, 182 checks passed, 0 failed,
-covering 30 components`. Re-running all four drive scripts headless in this
-session (`nix develop --command xvfb-run -a ruby test/drive_*.rb`) gives:
-
-| Script | `ok`/`FAIL` lines counted | Tracks failures into exit code? |
-|---|---:|---|
-| `test/drive_window.rb` | **0** | No `check` helper at all — the script is `puts` statements plus `DRIVE OK` printed unconditionally at the end, regardless of what happened above it |
-| `test/drive_canvas.rb` | 28 | **No.** `check` prints `ok`/`FAIL` but never appends to any array, and the script prints `puts "DRIVE OK"` unconditionally on the last line — a `FAIL` line here would be printed to the log and the script would still report success and exit 0 |
-| `test/drive_sidebar.rb` | 46 | Yes — `check` pushes to `FAILURES`, the script prints `DRIVE FAILED: ...` and `exit 1` if non-empty |
-| `test/drive_operations.rb` | 85 | Yes — same `FAILURES` pattern |
-| **Total observed** | **159** | — |
-
-Two findings, not one:
-
-1. **159 ≠ 182.** The gate's own headline number does not reproduce from an
-   actual run of the four scripts it names. Either the gate was measured
-   against a different revision, a different environment produced a
-   different style count (`drive_sidebar.rb` loops over "every bundled style
-   but System", so the count is sensitive to how many `.style` files ship —
-   worth checking if that's the source of the drift), or the number was
-   asserted without being re-run. Whichever it is, it is not reproduced in
-   this session and should not be repeated as fact until it is.
-2. **Of the 159 checks this session could reproduce, up to 28 (`drive_canvas.rb`)
-   cannot actually fail the gate.** A regression in any of those 28
-   assertions — including the 8 math-parser overlaps with upstream's suite
-   named above — would print `FAIL` to stdout and the script would still
-   print `DRIVE OK` and exit 0. Any harness that gates on exit code, or on
-   the literal string `"DRIVE OK"`, treats a failing `drive_canvas.rb` as
-   passing. **This is the false-green risk the task asked to be found,
-   and it sits in the port's own test harness, not in a document's prose.**
-   It is filed again in `accountability-ensurance.md` because it is exactly
-   the kind of defect that report exists to surface.
-3. `test/drive_window.rb` contributes real coverage of zero assertions while
-   still reporting `DRIVE OK`. It is not a test; it is a smoke-run with
-   `puts` statements. Counting it among "30 components" covered is
-   generous — it exercises several widgets but checks nothing about any of
-   them.
-
-The dev shell's own banner advertises a third command: `ruby -e 'require
-"rspec/core"; exit RSpec::Core::Runner.run([...])' spec`. Running it in this
-session:
-
-```
-LoadError: cannot load such file -- kettle/test/rspec
-0 examples, 0 failures, 2 errors occurred outside of examples
+```ruby
+it "builds a data item with its data and style properties"      # defaults, not dict-keyed
+it "builds an equation item named after its equation"            # constructor, not dict-keyed
+it "builds a text item anchored at a point"                      # constructor, not dict-keyed
+it "builds a generated data item from its equation and range"    # constructor, not dict-keyed
+it "round-trips a data item through to_dict/new_from_dict"        # ~ test_new_from_dict_data_item
+it "round-trips an equation item through to_dict/new_from_dict"   # no upstream equivalent (upstream never tests equation-item dict round-trip)
 ```
 
-`spec/spec_helper.rb` requires a gem (`kettle-soup-cover`, `kettle/test/
-rspec`) not present in the dev shell's `Gemfile.lock` resolution used here,
-and `spec/` contains no actual example files — it is unmodified `bundle gem`
-scaffolding (`spec/spec_helper.rb`, `spec/README.md`), never filled in. The
-advertised "run the specs" command fails outright and was not part of either
-the 182/0/30 claim or this session's 159-check recount. **A documented test
-command that cannot run is itself a gap**, independent of the drive scripts.
+Upstream's 6: `test_new_from_dict_data_item`, `test_new_from_dict_text_item`,
+`test_new_from_dict_fill_item`, `test_new_from_dict_unknown_type_raises`,
+`test_data_item_default_data`, `test_data_item_default_err`.
+
+- **Covered, by behaviour not by name:** `test_new_from_dict_data_item` —
+  the port's "round-trips a data item through to_dict/new_from_dict" does
+  construct via `new_from_dict` and check the rebuilt fields. Close enough
+  to count as covered, but it is not named after its upstream counterpart,
+  so a reviewer grepping for `new_from_dict_data_item` finds nothing.
+- **Not covered:**
+  - `test_new_from_dict_text_item` — the port's text-item test builds via
+    the plain constructor (`ItemFactory.new_text_item`), never through
+    `to_dict`/`new_from_dict`. **Gap**, not a rename.
+  - `test_new_from_dict_fill_item` — no `FillItem` test of any kind in this
+    file. **Gap.** (`lib/item/fill_item.rb` exists; it is untested here.)
+  - `test_new_from_dict_unknown_type_raises` — no test asserts
+    `ItemFactory.new_from_dict` raises on an unrecognised `type` key.
+    **Gap**, and a meaningful one: an unhandled bad-type dict is exactly the
+    kind of input a corrupted or hand-edited project file would produce.
+  - `test_data_item_default_data` / `test_data_item_default_err` — upstream
+    pins what a freshly-constructed `DataItem` defaults `xerr`/`yerr`/etc.
+    to before any data is set. The port's "builds a data item with its data
+    and style properties" test always passes explicit `xdata`/`ydata` and
+    never inspects the pre-data defaults. **Gap.**
+
+So of upstream's 6, **2 are behaviourally covered (unnamed), 4 are clean
+gaps.** The headline "6/6 `it` blocks" is not the same claim as "6/6 tests
+ported" and this report declines to round up.
+
+`spec/project_spec.rb` (5 examples) is real, substantial coverage of
+`lib/project.rb` — but it has no upstream counterpart to be bijective with
+(upstream has no `test_project.py`; the closest upstream tests are the
+migration ones, which pin `graphs/migrate.py`, not `graphs/project.vala`).
+It is **extra** coverage, filed under `## Extra` below, same treatment the
+skill gives planify-rb's own-written suite.
+
+## 3. The runtime gate, rechecked
+
+Re-running everything the dev shell advertises, headless, this session:
+
+| Command | Result |
+|---|---|
+| `nix develop --command xvfb-run -a ruby -e 'require "rspec/core"; exit RSpec::Core::Runner.run(["--format","progress","--require","spec_helper","spec"])'` | **29 examples, 0 failures** (18 math-eval + 6 item-instantiation + 5 project) |
+| `nix develop --command xvfb-run -a ruby test/drive_window.rb` | **DRIVE OK**, 20 `check()` calls, all passing, failures tracked in a real `FAILURES` array and `exit 1` on non-empty (confirmed fixed — the prior round's "no assertion, unconditional DRIVE OK" bug is gone) |
+| `nix develop --command xvfb-run -a ruby test/drive_canvas.rb` | **DRIVE OK**, 27 `check()` calls, same real `FAILURES`/`exit` pattern (confirmed fixed — the prior round's "never fails regardless of a FAIL line" bug is gone) |
+| `nix develop --command xvfb-run -a ruby test/drive_sidebar.rb` | **DRIVE OK**, 28 `check()` calls, same pattern |
+| `nix develop --command xvfb-run -a ruby test/drive_operations.rb` | **DRIVE OK**, 75 `check()` calls, same pattern |
+
+Total counted this session: **29 + 20 + 27 + 28 + 75 = 179** individual
+assertions across rspec + the 4 drive scripts, all using a real
+pass/fail/exit-code mechanism. The task's stated gate is `187 checks passed,
+0 failed, covering 30 components`. **179 ≠ 187** — close, but still not a
+reproduction; the 8-check gap was not tracked down in this pass (candidates:
+the `drive_sidebar.rb` style-list loop is sensitive to how many bundled
+`.style` files ship, or the gate's 187 was counted at a slightly different
+revision). This is recorded rather than smoothed over: **a gate number that
+does not reproduce to the digit should not be repeated as fact** until
+someone does reconcile it.
+
+**What the gate figure cannot tell you, regardless of whether it is 179 or
+187:** both counts are over the files `component-identification.md` lists as
+ported. Neither drive script nor any spec touches the style editor, file
+import, or legacy migration, because none of that code exists — "30
+components covered" is 30 of the ~32 files that exist, not 30 of the
+upstream app's components. A component no check exercises, per this task's
+own framing, is unverified, not done — and the style editor + file import +
+migration subsystems are not in anyone's check count at all, gate or
+otherwise.
 
 ## 4. Verdict
 
-Test parity is **0/43**, not met. The port's drive scripts are real,
-substantial, and mostly honest about failure (3 of 4 correctly gate on
-`FAILURES`) — but they are extra coverage, not ported coverage, per this
-skill's definition: none is named after, or asserts the same property as,
-any of the 43 upstream tests. They belong under `## Extra` below, outside
-the count, same as the skill's own planify-rb example.
+Test parity is **18/43 clean, 2/43 behaviourally-covered-but-unnamed, 23/43
+gap, 7/43 untestable until `migrate.py` exists** (`18 + 2 + 23 + ... ` —
+precisely: math-eval 18/18, item-instantiation 2/6 behavioural + 4/6 gap,
+migration 0/7 gap (untestable), operations 0/12 gap). This is real, large
+improvement over the prior round's 0/43 — the math-parser suite in
+particular is now a genuine, named, bijective port of upstream's hardest
+test file — but it is not test parity, and the remaining 23 clean gaps plus
+4 partial ones are concentrated exactly where the untested code lives
+(operations, item dict-deserialization edge cases, migration).
 
 ## Extra
 
-- `test/drive_window.rb` — boots the app, adds an equation item, renders the
-  canvas once. **0 real assertions** despite always reporting success.
-- `test/drive_canvas.rb` — 28 checks on the math parser, multi-item canvas
-  rendering, undo/redo, pan/zoom/select, log-axis rendering. **Cannot fail
-  the gate** due to the bug in §3.
-- `test/drive_sidebar.rb` — 46 checks (16 of them a style-list loop) on item
-  rows, the edit-item page per item kind, colour widgets, the style manager.
-- `test/drive_operations.rb` — 85 checks on array operations, the printer,
-  equation/fill/dataset operations, exports, and widget construction.
-- `spec/` — present, empty, and broken (`LoadError`). Not run by anything
-  that currently passes.
+- `spec/project_spec.rb` — 5 examples, real coverage of `lib/project.rb`,
+  no upstream test file to be bijective with. Extra, not counted toward the
+  43.
+- `test/drive_window.rb`, `test/drive_canvas.rb`, `test/drive_sidebar.rb`,
+  `test/drive_operations.rb` — 150 `check()` calls total, all now gating
+  correctly on a real `FAILURES` array and `exit 1`. Real, substantial,
+  honest-on-failure coverage of UI state after an action — but none of it is
+  named after, or asserts the same named property as, any of the 43 upstream
+  tests, so by this skill's definition it is extra coverage, not ported
+  coverage.
 
-## Behaviour still owed (for the 43 gap rows, grouped)
+## Behaviour still owed (for the 23 clean gap + 4 partial rows, grouped)
 
-- The math parser's precedence, associativity and error-reporting edge cases
-  pinned by `test_math_evaluation.vala`'s 10 untouched cases (operator
-  precedence, power associativity as its own case, implicit multiplication,
-  degree-mode trig and inverse trig, nested expressions, decimal-separator
-  swap, the three invalid-input error cases, and the six-expression syntax
-  error table) are not individually pinned in the port.
-- Deserializing a saved item (`DataItem`/`TextItem`/`FillItem`) from a plain
-  dict, and raising on an unrecognised `type`, is not pinned.
-- Reading, migrating and validating a v1 `.graphs` project file end to end is
-  not pinned — and cannot be, until `graphs/project.vala` and
-  `graphs/migrate.py`'s behaviour exists in the port at all
-  (`component-identification.md`).
-- The twelve numeric properties `test_operations.py` pins per-operation
-  (normalize's max, each translate/multiply's exact per-element relationship,
-  center-at-maximum, etc.) against a fixed fixture array are not pinned
-  against that fixture in the port.
+- `test_new_from_dict_text_item`, `test_new_from_dict_fill_item`,
+  `test_new_from_dict_unknown_type_raises`, `test_data_item_default_data`,
+  `test_data_item_default_err` — five of upstream's six item-instantiation
+  properties, including the one error case (bad `type` on deserialize).
+- All 12 of `test_operations.py`'s per-operation numeric properties against
+  its fixed `XDATA`/`YDATA` fixture (normalize, translate ×2, multiply ×2,
+  center ×2, derivative, integral, cut, fft ×2).
+- All 7 of `test_migration.py` — blocked on `graphs/migrate.py` having no
+  port file at all, and on `tests/project_v1.graphs` never having been
+  copied into `test/`.
+- The 8-check discrepancy between this session's 179-check recount and the
+  task's stated 187, left open rather than asserted away.

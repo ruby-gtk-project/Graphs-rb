@@ -1,5 +1,17 @@
 # Graphs — component inventory (upstream `origin/main` vs. `ruby`)
 
+> **Superseded.** This file was written against `ruby` @ `8930c5e3`, before
+> the sidebar edit-item page, colour row, curve-fitting dialog (`42ff07f5`)
+> and project load/save (`8915152e`) were ported. `component-identification.md`
+> is the current, maintained inventory and records the same rows updated for
+> every commit since. Kept here only for its original per-file "Notes" detail
+> on areas `component-identification.md` summarizes more tersely (figure.py/
+> artist.py/scales.py coverage inside canvas.rb, `math_parser/main.vala`,
+> `graphs/bindings.vala` vs `properties.rb`). Do not read the "Missing" rows
+> for curve fitting, project/migration or the style editor below as current —
+> two of those three subsystems are partially ported now; see
+> `component-identification.md`.
+
 Scope: every user-facing component (windows, dialogs, pages, rows, menus,
 shortcuts, preferences, actions, empty/error states) plus the declarative UI
 (`.blp`), GSettings schema, GResource manifest and `po/` catalogue that back
@@ -162,7 +174,7 @@ Entirely unported:
 
 | Upstream file(s) | Port path | Kind | Exists | Notes |
 |---|---|---|---|---|
-| `help/C/*.page` (curve-fitting, edit-item, edit-style, export, figure-settings, import, index, legal, manipulate, projects, window) | — | Help pages | Missing | No `help/` tree on `ruby`; out of scope for widget parity but flagged since the task asked for "full parity" |
+| `help/C/*.page` (curve-fitting, edit-item, edit-style, export, figure-settings, import, index, legal, manipulate, projects, window) | — | Help pages | Missing | I did not build any of the 11 help pages or their translated copies; a user of this port who presses Help gets nothing upstream's user gets. This is a real gap in the delivered app, not a decision to exclude help content from the audit. |
 
 ## Summary
 

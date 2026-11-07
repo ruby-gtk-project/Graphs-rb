@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `fa994448` |
-| Port | `ruby` @ `8930c5e3` |
+| Port | `ruby` @ `42ff07f5` (this pass updates the two subsystem rows ported since `8930c5e3` — curve fitting and project load/save — the rest of this file was written against `8930c5e3` and is otherwise still accurate) |
 | Method | `.claude/skills/component-identification` applied by hand (file-level scan of both trees; `gir-symbols.sh`/`component-scan.sh` not run — see caveat below) |
 
 Caveat up front: this pass did not run `component-scan.sh` with a built
@@ -81,11 +81,11 @@ All seven standalone dialogs (add-equation, add-fill, export-figure,
 export-items, generate-data, smoothen, transform) and all seven alert dialogs
 — Yes, as before.
 
-**Still entirely missing:**
+**Ported since the last pass (`8915152e`, `42ff07f5`):**
 
 | Upstream file(s) | Port path | Exists |
 |---|---|---|
-| `graphs/curve_fitting.vala`, `graphs/curve_fitting.py`, `data/ui/curve-fitting.blp`, `data/ui/fitting-parameters.blp` | — | **Missing** |
+| `graphs/curve_fitting.vala`, `graphs/curve_fitting.py`, `data/ui/curve-fitting.blp`, `data/ui/fitting-parameters.blp` | `lib/curve_fitting_dialog.rb`, `lib/curve_fitting.rb` | **Now Yes** (was missing) — file exists, four-axis table not built (see `component-parity.md`); same unmarked-literal pattern confirmed at `lib/curve_fitting_dialog.rb:125,139,142,169,176,182,190,204,210,220,224,225,255,256` |
 
 ## Colour widgets
 
@@ -123,18 +123,21 @@ file_import/` directory exists.
 
 ## Project load/save & legacy migration
 
-**Still entirely unported**:
-
 | Upstream file(s) | Port path | Exists |
 |---|---|---|
-| `graphs/project.vala`, `graphs/project.py` | — | **Missing** |
-| `graphs/migrate.py` | — | **Missing** |
+| `graphs/project.vala`, `graphs/project.py` | `lib/project.rb` | **Now Yes** (was missing, ported in `8915152e`) — `Graphs::ProjectParseError` and save/open/undo-history round-trip exist, driven by `test/drive_window.rb` and now `spec/project_spec.rb` (5 examples, all passing — see `test-parity.md`) |
+| `graphs/migrate.py` | — | **Still Missing** |
 
-The alert dialogs this flow triggers (`beta-disallowed`, `legacy-migration-
-disallowed`, `invalid-project`) exist in `lib/alert_dialogs.rb`, but nothing
-in `lib/` ever raises them — there is no save, no open, no "recent projects",
-no migration path for a `.graphs` v1 file. `tests/test_migration.py` upstream
-(7 tests) pins exactly this code, and none of it exists in the port.
+`lib/project.rb` raises `ProjectParseError` for a missing-keys and a
+newer-version project file (`spec/project_spec.rb:62,68`), so two of
+`lib/alert_dialogs.rb`'s triggers (`invalid-project`-shaped cases) now have a
+real caller. There is still no legacy `.graphs` v1 migration path at all —
+`graphs/migrate.py` is unported, `tests/project_v1.graphs` (upstream's
+migration fixture) was never copied into the port's `test/`, and the
+`beta-disallowed`/`legacy-migration-disallowed` alert dialogs still have no
+code path that raises them, since nothing in the port opens a legacy or beta
+project to disallow. `tests/test_migration.py` upstream (7 tests) pins
+exactly the missing code and none of it exists in the port.
 
 ## Math parser & misc utilities
 
@@ -151,15 +154,18 @@ translated copies in dozens of languages via `help/<lang>/*.po`.
 
 ## Summary of what changed since the last inventory
 
-- **Closed:** sidebar edit-item page + 7 boxes/groups, colour row widget,
-  and (per the git log) the style manager is now driven by a test.
+- **Closed since `8930c5e3`:** sidebar edit-item page + 7 boxes/groups,
+  colour row widget, the style manager driven by a test, the curve-fitting
+  dialog + its fitting-parameters sub-UI (`42ff07f5`), and project
+  load/save with `ProjectParseError` (`8915152e`).
 - **Still wide open, verified by file-existence, each a whole subsystem with
   zero port files:** style editor window (6 files), file import (9+ files),
-  project load/save/migration (2 files + the flow that calls them), curve
-  fitting dialog (1 file + its fitting-parameters sub-UI), GSettings schema,
-  app metadata (`.desktop`/`.metainfo`/`.mime`/`.service`), `po/` (28
+  legacy-project migration (`graphs/migrate.py` — project *save/load* is now
+  ported, migration from the old pickle-based v1 format is not), GSettings
+  schema, app metadata (`.desktop`/`.metainfo`/`.mime`/`.service`), `po/` (28
   languages), `help/` (11 pages + translations).
 - **Not attempted in this pass:** the widget/CSS/signal/action table for any
   single file, upstream or port. `component-parity.md` below does this for
-  the three files the `ruby-gtk-testing` driver actually exercises and stops
-  there — the remaining ~20 ported files have never had their axes compared.
+  the four files the `ruby-gtk-testing` driver and `spec/` actually exercise
+  and stops there — the remaining ~20 ported files have never had their axes
+  compared.

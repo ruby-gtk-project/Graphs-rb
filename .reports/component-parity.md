@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `fa994448` |
-| Port | `ruby` @ `8930c5e3` |
-| Units with full four-axis parity proven | **0 / ~30 ported files** |
-| Units with a widget/CSS/signal/action table built in this pass | **2** (`color_row.rb`, `sidebar/edit_item/page.rb`) |
+| Port | `ruby` @ `42ff07f5` |
+| Units with full four-axis parity proven | **0 / ~32 ported files** |
+| Units with a widget/CSS/signal/action table built in this pass | **2** (`color_row.rb`, `sidebar/edit_item/page.rb`) — carried over unchanged from the prior pass; `curve_fitting_dialog.rb` and `project.rb`, ported since, were only spot-checked for the text axis (see below), not tabled |
 
 ## Headline finding
 
@@ -19,7 +19,8 @@ window.edit_item_page.widget.title, "Edit Item")` is written to assert the
 *English* string, so it passes whether or not that string is translatable.
 That is exactly the failure mode `component-parity.md`'s Step 3 (text axis)
 exists to catch, and it is why the gate's green does not mean component
-parity.
+parity. (This round's gate figure is `187 checks / 30 components`; see
+`test-parity.md` for the recount.)
 
 ## Unit: colour row — `graphs/color_row.vala` + `data/ui/color-row.blp` → `lib/color_row.rb`
 
@@ -67,7 +68,38 @@ parity.
   box builds, their CSS, or their signals. That is seven more unchecked units
   hiding behind one green line.
 
-## What was not checked at all (0 of 30 files given a table)
+## Unit: curve fitting dialog — `graphs/curve_fitting.vala`/`.py` + `data/ui/curve-fitting.blp`/`fitting-parameters.blp` → `lib/curve_fitting_dialog.rb`, `lib/curve_fitting.rb` (ported since the last pass, not yet tabled)
+
+No widget/CSS/signal table was built for this unit — it is new since
+`8930c5e3` and the four-axis comparison was not run. One text-axis spot
+check, same method as the two units above: every title/label/row-title in
+`lib/curve_fitting_dialog.rb` is a bare Ruby literal (`"Curve Fitting"`,
+`"Cancel"`, `"Add Fit"`, `"Equation"`, `"Y ="`, `"Fitting Parameters"`,
+`"Fit"`, `"Confidence Band"`, `"Fit Curve"`, `"No fit yet"` — lines 125, 139,
+142, 169, 176, 182, 190, 204, 210, 220, 224, 255), matching upstream's own
+strings 1:1 in English but with no `_()`/gettext call anywhere, same gap
+class as `Change Color`/`Edit Item` below. This is a **gap**, not a pass —
+recorded here and cross-filed in `translation-parity.md`. `test/
+drive_operations.rb` drives this dialog (builds it, runs a fit, adds the
+resulting items) but, consistent with every other drive check, asserts
+widget *state*, never text or CSS.
+
+## Unit: project load/save — `graphs/project.vala`/`.py` → `lib/project.rb` (ported since the last pass, not yet tabled)
+
+This is a model/controller unit, not primarily a widget tree, so the
+four-axis table does not apply the same way; it is noted here instead of
+skipped silently. `spec/project_spec.rb` (5 examples, all passing — see
+`test-parity.md`) exercises round-trip save/load, the unsaved flag, view
+history, and `ProjectParseError` for two malformed-file shapes. Not
+exercised anywhere: the actual alert-dialog wiring — `lib/alert_dialogs.rb`'s
+`invalid_project`/`beta_disallowed`/`legacy_migration_disallowed` builders
+are driven standalone (`"X alert builds: true"` in `drive_operations.rb`),
+but nothing in `lib/project.rb` or `lib/window.rb` was confirmed in this pass
+to actually *call* them on a real parse failure path through the UI, as
+opposed to the dialogs simply existing and the spec raising the Ruby
+exception directly. That wiring gap is unverified, not confirmed either way.
+
+## What was not checked at all (0 of ~32 files given a table)
 
 Every other ported file — `window.rb`, `canvas.rb`, `figure_settings.rb`,
 `styles.rb`, all six item model classes, `item_box.rb`, all seven standalone
@@ -88,12 +120,13 @@ equivalent) was not run in this pass. **Unverified**, not clean.
 ## Whole units with no port file at all
 
 Per `component-identification.md`: the style editor window and its five
-satellite files, the whole file-import sub-tree, project load/save/
-migration, and the curve-fitting dialog. These are not "gap" rows in a table
-— there is no port widget to put in the "Port ×" column, so the count is
-`upstream N, port 0` for every widget in every one of those files. They are
-listed here for completeness; the detail lives in
-`component-identification.md`.
+satellite files, the whole file-import sub-tree, and legacy-project
+migration (`graphs/migrate.py`). (Project load/save and the curve-fitting
+dialog, listed here in the prior pass, now have port files — see the two
+units above.) These remaining ones are not "gap" rows in a table — there is
+no port widget to put in the "Port ×" column, so the count is `upstream N,
+port 0` for every widget in every one of those files. They are listed here
+for completeness; the detail lives in `component-identification.md`.
 
 ## Rules check
 

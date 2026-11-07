@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `fa994448` |
-| Port | `ruby` @ `8930c5e3` |
+| Port | `ruby` @ `42ff07f5` (rechecked this pass — `grep -rn '_(' lib/ \| wc -l` is still `0`, including in the curve-fitting dialog and project files ported since the last pass; see "Rechecked" note below) |
 | Domain | `se.sjoerd.Graphs` (`meson.build` project id — unconfirmed against an installed `.mo`, since none exists) |
 | Upstream messages | **~374** distinct `msgid`s (counted from `po/nl.po`'s `^msgid "` lines minus the header; the full `msgid-census.sh`/`catalogue.rb` pipeline from the skill was not run in this pass — see caveat) |
 | Upstream languages | **28** `.po` files under `po/` |
@@ -36,6 +36,17 @@ and no `require "gettext"` (or any Ruby gettext gem) anywhere in `lib/` or
 button label, every tooltip, every toast — is a bare Ruby string literal.
 This is not "translation deferred"; it is translation absent as a mechanism,
 not merely as content.
+
+**Rechecked this pass against the two subsystems ported since the last
+report** (`lib/curve_fitting_dialog.rb`, `lib/curve_fitting.rb`,
+`lib/project.rb` — `component-identification.md`): none of the three
+contains `_(`, `n_(`, `N_(` or `C_(`, confirming the gap is unchanged by new
+code, not shrinking. `lib/curve_fitting_dialog.rb` alone adds at least 13
+more untranslated literals (`"Curve Fitting"`, `"Cancel"`, `"Add Fit"`,
+`"Equation"`, `"Y ="`, `"Fitting Parameters"`, `"Fit"`, `"Confidence Band"`,
+`"Fit Curve"`, `"No fit yet"` ×2, `""` subtitle ×2) to the pile counted in
+§1 — the port is adding user-facing text faster than it is adding any
+translation mechanism to carry it.
 
 ## 2. Does the port ship a catalogue?
 

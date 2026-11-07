@@ -192,6 +192,25 @@ module Graphs
 
     def params_for_name(name) = params_for(find(name))
 
+    # The names a template picker offers: every style except the system one,
+    # in the same order `styles` holds them. The style editor's "Create
+    # Style…" dialog starts a new style from one of these.
+    def template_names = @styles.drop(1).map(&:name)
+
+    # Duplicates the style at `index` (an index into `styles`, so 1 is the
+    # first template) under a new name, writing it into the user's style
+    # directory, and returns the Gio::File the style editor should load.
+    def create_style(index, name)
+      template = @styles.fetch(index)
+      params, graphs_params = StyleIO.parse(template.file)
+      graphs_params = graphs_params.merge("name" => name)
+      file_name = "#{sanitize_filename(name)}.mplstyle"
+      path = unique_path(File.join(style_dir, file_name))
+      StyleIO.write(path, params.dup, graphs_params)
+      reload_user_styles
+      Gio::File.new_for_path(path)
+    end
+
     # The system style follows the desktop's light/dark preference.
     def system_style_params
       if Adwaita::StyleManager.default.dark?
@@ -227,6 +246,26 @@ module Graphs
 
       def style_files(directory)
         Dir.glob(File.join(directory, "*.mplstyle")).sort
+      end
+
+      def sanitize_filename(name)
+        name.gsub(/[^\w.-]+/, "_").then { |sanitized| sanitized.empty? ? "style" : sanitized }
+      end
+
+      def unique_path(path)
+        if File.exist?(path)
+          base = File.basename(path, ".mplstyle")
+          directory = File.dirname(path)
+          number = 1
+          candidate = File.join(directory, "#{base}_#{number}.mplstyle")
+          while File.exist?(candidate)
+            number += 1
+            candidate = File.join(directory, "#{base}_#{number}.mplstyle")
+          end
+          candidate
+        else
+          path
+        end
       end
 
       def style_for_file(path, mutable:)

@@ -221,6 +221,10 @@ module Graphs
           menu.append_section(nil, section)
         end
         Gio::Menu.new.tap do |section|
+          section.append("Styles…", "app.style-editor")
+          menu.append_section(nil, section)
+        end
+        Gio::Menu.new.tap do |section|
           section.append("Keyboard Shortcuts", "win.show-shortcuts")
           section.append("About Graphs", "app.about")
           menu.append_section(nil, section)

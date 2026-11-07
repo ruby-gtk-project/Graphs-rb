@@ -228,6 +228,16 @@ module Graphs
       end
     end
 
+    # The style editor previews a style that has not been saved to disk, so
+    # it cannot go through `select_style`'s by-name lookup; it hands the
+    # freshly parsed parameters straight in instead.
+    def set_preview_style(params)
+      @old_selected_style_params = @selected_style_params
+      @selected_style_params = params
+      reset_items
+      emit_signal(:figure_settings_changed, :preview_style)
+    end
+
     def handle_style_change
       update_selected_style
       reset_items

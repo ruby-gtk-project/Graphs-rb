@@ -5,6 +5,7 @@ require "adwaita"
 require_relative "rb/version"
 require_relative "../actions"
 require_relative "../data"
+require_relative "../style_editor/window"
 require_relative "../window"
 
 module Graphs
@@ -52,6 +53,13 @@ module Graphs
       Window.new(application: self).tap do |window|
         window.build
         windows << window
+      end
+    end
+
+    def open_style_editor
+      StyleEditor::Window.new(application: self).tap do |window|
+        window.build
+        window.present
       end
     end
 

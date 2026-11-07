@@ -61,6 +61,7 @@ module Graphs
       add_action(application.app, "quit") { application.quit_action }
       add_action(application.app, "about") { application.show_about }
       add_action(application.app, "new-window") { application.open_new_window }
+      add_action(application.app, "style-editor") { application.open_style_editor }
 
       GLOBAL_ACCELERATORS.each do |name, accelerators|
         application.app.set_accels_for_action(name, accelerators)

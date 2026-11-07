@@ -7,6 +7,7 @@ require_relative "data"
 require_relative "item_box"
 require_relative "main_sidebar_page"
 require_relative "math_parser"
+require_relative "project"
 require_relative "sidebar/edit_item/page"
 require_relative "utilities"
 
@@ -23,12 +24,13 @@ module Graphs
       @data = data || Data.new
     end
 
-    attr_reader :data
+    attr_reader :data, :application
 
     def build
       window.tap do |widget|
         widget.title = "Graphs"
         widget.child = split_view
+        widget.signal_connect("close-request") { on_close_request }
 
         split_view.tap do |view|
           view.sidebar = navigation_view
@@ -301,6 +303,20 @@ module Graphs
         when :can_view_forward then set_action_enabled("view-forward", @data.can_view_forward)
         when :unsaved, :file then on_unsaved_change
         end
+      end
+
+      # Confirms unsaved changes before the window actually closes; the
+      # signal has to be stopped here (`true`) and the window closed
+      # explicitly once `Project.close` has decided to go ahead, since the
+      # confirmation dialog answers asynchronously.
+      def on_close_request
+        Project.close(self) do |closed|
+          if closed
+            @application.windows.delete(self)
+            window.destroy
+          end
+        end
+        true
       end
 
       def connect_canvas

@@ -207,6 +207,12 @@ module Graphs
       @primary_menu ||= Gio::Menu.new.tap do |menu|
         Gio::Menu.new.tap do |section|
           section.append("New Project", "app.new-window")
+          section.append("Open Project…", "win.open-project")
+          menu.append_section(nil, section)
+        end
+        Gio::Menu.new.tap do |section|
+          section.append("Save Project", "win.save-project")
+          section.append("Save Project As…", "win.save-project-as")
           menu.append_section(nil, section)
         end
         Gio::Menu.new.tap do |section|

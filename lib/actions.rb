@@ -8,6 +8,7 @@ require_relative "export_figure_dialog"
 require_relative "export_items"
 require_relative "generate_data_dialog"
 require_relative "operations"
+require_relative "project"
 require_relative "settings"
 require_relative "shortcuts_dialog"
 require_relative "smoothen_dialog"
@@ -47,6 +48,9 @@ module Graphs
       "win.add-fill"        => ["<control><shift>f"],
       "win.export-data"     => ["<control><shift>e"],
       "win.export-figure"   => ["<control>e"],
+      "win.save-project"    => ["<control>s"],
+      "win.save-project-as" => ["<control><shift>s"],
+      "win.open-project"    => ["<control>o"],
       "win.zoom-in"         => ["<control>plus", "<control>equal", "<control>KP_Add"],
       "win.zoom-out"        => ["<control>minus", "<control>KP_Subtract"],
     }.freeze
@@ -116,6 +120,10 @@ module Graphs
       add_action(window.window, "add-fill") do
         AddFillDialog.new(window: window).present
       end
+
+      add_action(window.window, "save-project") { Project.save(window, false) }
+      add_action(window.window, "save-project-as") { Project.save(window, true) }
+      add_action(window.window, "open-project") { Project.open(window) }
 
       add_action(window.window, "export-data") { Export.export_items(window) }
 

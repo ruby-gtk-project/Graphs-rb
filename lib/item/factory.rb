@@ -253,6 +253,8 @@ module Graphs
       case Properties.normalize(property)
       when :data then item.data = holder_from(item, value)
       when :equation then item.equation = Graphs.expression_to_ast(value)
+      when :xposition then item.xposition = XPosition.from_string(value.to_s)
+      when :yposition then item.yposition = YPosition.from_string(value.to_s)
       else item[property] = value
       end
     end
@@ -275,6 +277,12 @@ module Graphs
       properties.delete(:lower_source)
       type.new.tap do |item|
         item.set_properties(properties)
+        unless properties[:xposition].nil?
+          item.xposition = XPosition.from_string(properties[:xposition].to_s)
+        end
+        unless properties[:yposition].nil?
+          item.yposition = YPosition.from_string(properties[:yposition].to_s)
+        end
         unless data.nil?
           item.data = holder_from(item, data)
         end

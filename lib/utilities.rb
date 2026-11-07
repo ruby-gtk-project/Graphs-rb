@@ -188,12 +188,16 @@ module Graphs
       )
     end
 
-    def get_filename(file) = File.basename(file.to_s)
+    # `file` is usually a Gio::File from a FileDialog result; a plain path
+    # string works too, which is what the drive scripts pass.
+    def file_path(file) = file.respond_to?(:path) ? file.path : file.to_s
+
+    def get_filename(file) = File.basename(file_path(file))
 
     # The directory a file lives in, with the home directory abbreviated, as
     # shown under the window title.
     def get_friendly_path(file)
-      path = File.dirname(File.expand_path(file.to_s))
+      path = File.dirname(File.expand_path(file_path(file)))
       home = Dir.home
       if path == home
         "~/"

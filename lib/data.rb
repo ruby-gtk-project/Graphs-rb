@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "json"
 require_relative "enums"
 require_relative "figure_settings"
 require_relative "item/factory"
@@ -9,6 +10,13 @@ require_relative "styles"
 require_relative "utilities"
 
 module Graphs
+  # Raised by `Data#load` when a project file cannot be read, is missing the
+  # keys a project dict must have, or carries a version this port does not
+  # know how to migrate. Ported from the `ProjectParseError` of upstream's
+  # graphs/project.vala and graphs/project.py.
+  class ProjectParseError < StandardError
+  end
+
   # Ported from upstream's graphs/data.vala together with its Python half,
   # graphs/data.py.
   #
@@ -26,6 +34,13 @@ module Graphs
     include Enumerable
 
     HISTORY_SIZE = 100
+
+    # Ported from upstream's graphs/project.py.
+    CURRENT_PROJECT_VERSION = 2
+    PROJECT_KEYS = %w[
+      version data figure-settings history-states history-position
+      view-history-states view-history-position
+    ].freeze
 
     # Limits move on every pan and zoom; the view history records them, so the
     # undo history ignores them.
@@ -346,6 +361,58 @@ module Graphs
         self.can_view_back = true
         self.can_view_forward = @current_view_state != @newest_view_state
       end
+    end
+
+    # Section project files
+    #
+    # Ported from the current-version half of upstream's graphs/project.py
+    # (`read_project_file`, `save_project_dict`); the version-to-version
+    # migrations `ProjectMigrator` performs and the pre-JSON legacy migration
+    # `migrate.py` does are not covered — a project from an older version
+    # raises rather than silently loading wrong data.
+
+    # The project dict as upstream's project files store it: the items, the
+    # figure settings, and both histories, in the shape `load` can read back.
+    def to_project_dict
+      view_states, view_position = view_history_payload
+      {
+        "version"               => CURRENT_PROJECT_VERSION,
+        "data"                  => @items.map { |item| to_dict(item) },
+        "figure-settings"       => figure_settings.to_h.transform_keys { |key| key.to_s.tr("_", "-") },
+        "history-states"        => @history_states.map { |batch, limits| [serialize_batch(batch), limits] },
+        "history-position"      => @history_pos,
+        "view-history-states"   => view_states,
+        "view-history-position" => view_position,
+      }
+    end
+
+    def save(file)
+      File.write(Tools.file_path(file), JSON.generate(to_project_dict))
+      self.file = file
+      self.unsaved = false
+    end
+
+    def load(file)
+      begin
+        project_dict = JSON.parse(File.read(Tools.file_path(file)))
+      rescue JSON::ParserError, SystemCallError
+        raise ProjectParseError, "Failed to parse project file"
+      end
+      PROJECT_KEYS.each do |key|
+        unless project_dict.key?(key)
+          raise ProjectParseError, "Project file is missing data"
+        end
+      end
+      version = project_dict["version"].to_i
+      if version > CURRENT_PROJECT_VERSION
+        raise ProjectParseError, "Project is from a newer incompatible version of Graphs"
+      elsif version < CURRENT_PROJECT_VERSION
+        raise ProjectParseError,
+          "Project is from an older version of Graphs that this port cannot migrate yet"
+      end
+      load_project_dict(project_dict)
+      self.file = file
+      self.unsaved = false
     end
 
     private
@@ -681,6 +748,78 @@ module Graphs
         @current_batch = []
         @data_copy = @items.map { |item| to_dict(item) }
         @figure_settings_copy = figure_settings.to_h
+      end
+
+      # Section project files
+
+      def serialize_batch(batch)
+        batch.map { |change_type, change| [change_type.to_s, change] }
+      end
+
+      def deserialize_batch(batch)
+        batch.map { |change_type, change| [change_type.to_sym, change] }
+      end
+
+      # The view history's circular buffer, walked from the oldest state to
+      # the newest and written out as a plain array, together with the
+      # current state's negative offset from the end of that array — the
+      # shape upstream's own, non-circular view history stores on disk.
+      def view_history_payload
+        states = []
+        current_index = nil
+        index = @oldest_view_state
+        loop do
+          states << @view_history_states[index]
+          if index == @current_view_state
+            current_index = states.length - 1
+          end
+          if index == @newest_view_state
+            break
+          end
+          index = (index + 1) % HISTORY_SIZE
+        end
+        [states, current_index - states.length]
+      end
+
+      def restore_view_history(states, position)
+        @view_history_states = Array.new(HISTORY_SIZE)
+        states.each_with_index { |limits, i| @view_history_states[i] = limits }
+        @oldest_view_state = 0
+        @newest_view_state = states.length - 1
+        @current_view_state = states.length + position
+        figure_settings.set_limits(@view_history_states[@current_view_state])
+        self.can_view_back = @current_view_state != @oldest_view_state
+        self.can_view_forward = @current_view_state != @newest_view_state
+      end
+
+      def load_project_dict(dict)
+        disconnect_from_all_items
+        items = dict.fetch("data").map { |item_dict| ItemFactory.new_from_dict(item_dict) }
+        items.each_with_index do |item, index|
+          ItemFactory.resolve_dependencies(item, dict["data"][index], items)
+        end
+        @items = items
+        @items.each { |item| connect_to_item(item) }
+
+        install_figure_settings(
+          FigureSettings.new.tap do |settings|
+            dict.fetch("figure-settings").each do |key, value|
+              settings[key] = FigureSettings.coerce(key, value)
+            end
+          end,
+        )
+
+        @history_states = dict.fetch("history-states").map do |batch, limits|
+          [deserialize_batch(batch), limits]
+        end
+        @history_pos = dict.fetch("history-position")
+        restore_view_history(dict.fetch("view-history-states"), dict.fetch("view-history-position"))
+
+        update_used_positions
+        emit_signal(:items_changed)
+        set_data_copy
+        self.can_redo = @history_pos < -1
+        self.can_undo = @history_states[0..@history_pos].any? { |batch, _| !batch.empty? }
       end
 
       # An item that depends on another stores that dependency as a position,

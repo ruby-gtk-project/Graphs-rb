@@ -8,11 +8,13 @@ require "tmpdir"
 require "graphs"
 
 SCRATCH = ENV.fetch("GRAPHS_DRIVE_OUT", Dir.tmpdir)
+FAILURES = []
 
 def check(label, actual, expected)
   if actual == expected
     puts "ok   #{label}: #{actual.inspect}"
   else
+    FAILURES << label
     puts "FAIL #{label}: #{actual.inspect} != #{expected.inspect}"
   end
 end
@@ -119,4 +121,10 @@ canvas.send(
 )
 surface.write_to_png(File.join(SCRATCH, "canvas_log.png"))
 puts "ok   log canvas rendered"
-puts "DRIVE OK"
+
+if FAILURES.empty?
+  puts "DRIVE OK"
+else
+  puts "DRIVE FAILED: #{FAILURES.inspect}"
+  exit 1
+end

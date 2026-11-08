@@ -8,17 +8,18 @@
 # Nothing else drives lib/style_editor/*.rb, so a port that builds cleanly
 # here is the first proof any of it has ever actually run.
 #
-# Ordering note: everything that touches the style grid (opening the style
-# editor, which builds it once, and closing back to it, which rebuilds it
-# a second time) is kept to the END of this script, with nothing allocation-
-# heavy run afterwards. Gtk::FlowBox#remove_all repopulated with
-# Gtk::DrawingArea-backed tiles (StylePreview), combined with a second such
-# rebuild and enough subsequent Ruby allocation to trigger a GC pass before
-# the pending frame tick for the destroyed tiles fires, reproducibly
-# segfaults — confirmed with no Graphs-rb code involved at all (see
-# .reports/style-editor-flowbox-drawingarea-gc.md). That is a ruby-gnome/
-# GTK4 binding gap, not a port bug, so the grid rebuild is driven exactly
-# once here (what closing the editor does) and nothing else runs after it.
+# GC note: Window#reload_grid used to destroy every tile with
+# Gtk::FlowBox#remove_all and rebuild them from scratch, which — because
+# each tile's Gtk::DrawingArea registers a set_draw_func FFI closure that
+# gobject-introspection does not keep rooted independently of the widget —
+# reproducibly corrupted the process once the GC ran before GTK's next
+# frame tick for the destroyed tiles fired (see
+# .reports/style-editor-flowbox-drawingarea-gc.md, reproduced there with no
+# Graphs-rb code at all). reload_grid is now fixed to never destroy a
+# tile's widget: each StylePreview is built once and reused in place
+# across reloads, with only tiles for styles that truly disappeared ever
+# removed. This script drives several grid rebuilds, with GC forced
+# between them, specifically to exercise that fix.
 $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 require "tmpdir"
 require "graphs"
@@ -162,11 +163,27 @@ app.app.signal_connect("activate") do
   check("create-style adds to the style list", style_manager.names.length > before_names.length, true)
   check("new style is mutable", style_manager.find("Drive Created Style").mutable?, true)
 
-  # Discard the unsaved rename and close back to the grid — the one place
-  # this script rebuilds the grid a second time, so it runs last, with
-  # nothing allocation-heavy after it before the quit below.
+  # Discard the unsaved rename and close back to the grid — the first of
+  # several grid rebuilds this script drives, now that reload_grid reuses
+  # tiles instead of destroying and recreating them.
   window.send(:close_style)
   check("closing returns to the grid", window.send(:stack).visible_child_name, "grid")
+  check(
+    "grid picked up the style created above",
+    window.send(:flow_box).children.length,
+    style_manager.styles.length,
+  )
+
+  # Force the GC and rebuild the grid several more times — the exact shape
+  # that used to crash the process (see the GC note above). Surviving this
+  # is the proof the fix holds, not just that the grid builds once.
+  GC.start
+  5.times do
+    1000.times { Array.new(50) { "x" * 20 } } # pressure the GC to actually move things
+    window.send(:reload_grid)
+    GC.start
+  end
+  check("grid survives repeated rebuilds under GC pressure", window.send(:flow_box).children.length, style_manager.styles.length)
   check("closing clears the title", window.send(:window).title, "Graphs Style Editor")
 
   GLib::Timeout.add(200) do

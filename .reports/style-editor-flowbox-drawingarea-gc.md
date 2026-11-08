@@ -1,6 +1,36 @@
 # Binding gap: Gtk::FlowBox#remove_all + Gtk::DrawingArea#set_draw_func + GC
 
-## Summary
+## Status: mitigated in the port, root cause still unfixed upstream
+
+`lib/style_editor/window.rb#reload_grid` no longer destroys and recreates
+`StylePreview` tiles on every rebuild. Each tile (and its
+`Gtk::DrawingArea`) is now built exactly once and kept in a
+`@style_previews` hash keyed by style name, reused in place across every
+later reload; `reload_grid` only removes a tile whose style has actually
+disappeared (deleted by the user), and only ever adds genuinely new
+tiles. Nothing with a `set_draw_func` closure is ever destroyed-then-
+GC'd as part of an ordinary rebuild any more, which was the exact
+mechanism below.
+
+This was verified by driving `reload_grid` far beyond the two calls the
+previous version of this script limited itself to: `test/drive_style_editor.rb`
+now forces `GC.start`, allocates pressure garbage, and calls `reload_grid`
+five more times in a row after the real close-style rebuild, and asserts
+the grid still has the right tile count afterward. It survives — the
+whole script reaches `DRIVE OK`. This is evidence the specific crash
+pattern reproduced below (destroy-and-recreate a batch of
+`Gtk::DrawingArea`-backed widgets, then let GC run) no longer occurs in
+this codebase, because that code path (destroying a live, already-
+realized `Gtk::DrawingArea` that has a registered draw closure) is no
+longer exercised. It is not a fix to `gobject-introspection` itself: a
+future call site that still destroys-and-recreates `set_draw_func`
+widgets (anywhere in this codebase or elsewhere) would still be at risk,
+and the underlying binding gap below is unresolved and worth filing
+against `ruby-gnome/gobject-introspection` upstream — this report
+documents it for that purpose, but no issue has been filed from this
+session.
+
+## Original summary
 
 Rebuilding a `Gtk::FlowBox` twice — `remove_all` followed by re-`append`ing
 children that are (or contain) `Gtk::DrawingArea` widgets using

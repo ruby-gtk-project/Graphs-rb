@@ -83,16 +83,42 @@ module Graphs
 
         # Section: the grid of available styles
 
+        # Rebuilds the grid without ever destroying a previously-built tile.
+        #
+        # A `Gtk::DrawingArea` registers its `set_draw_func` callback as an
+        # FFI closure that `gobject-introspection` does not keep rooted
+        # independently of the widget staying alive; destroying and
+        # recreating a batch of `StylePreview` tiles (each backed by one)
+        # via `Gtk::FlowBox#remove_all` + re-`append` reproducibly corrupts
+        # the process once the GC runs before GTK's next frame tick for the
+        # destroyed tiles fires — see
+        # .reports/style-editor-flowbox-drawingarea-gc.md, reproduced there
+        # with no Graphs-rb code at all. The fix is to never let a tile's
+        # underlying widget be destroyed in the first place: each
+        # `StylePreview` is built once and kept (and its `Gtk::DrawingArea`
+        # with it), reused in place across every later reload, with only
+        # tiles for styles that truly no longer exist ever removed.
         def reload_grid
-          flow_box.tap do |box|
-            box.remove_all
-            @style_manager.styles.each do |style|
-              box.append(tile_for(style))
+          previews = (@style_previews ||= {})
+          current = @style_manager.styles
+          current_names = current.map(&:name)
+          previews.each_key.to_a.each do |name|
+            unless current_names.include?(name)
+              flow_box.remove(previews.delete(name).widget)
+            end
+          end
+          current.each do |style|
+            preview = previews[style.name]
+            if preview
+              preview.style = style
+            else
+              previews[style.name] = build_tile(style)
+              flow_box.append(previews[style.name].widget)
             end
           end
         end
 
-        def tile_for(style)
+        def build_tile(style)
           StylePreview.new(
             on_open:      ->(picked) { load(picked.file) },
             on_open_with: ->(picked) { Tools.open_file_location(picked.file) },
@@ -100,13 +126,18 @@ module Graphs
           ).tap do |preview|
             preview.build
             preview.style = style
-            preview.widget.add_controller(click_gesture_for(style))
-          end.widget
+            preview.widget.add_controller(click_gesture_for(preview))
+          end
         end
 
-        def click_gesture_for(style)
+        # Reads `preview.style` lazily, at click time, rather than closing
+        # over the `style` object passed to `build_tile` — the tile's
+        # widget (and this gesture) is now built once and reused across
+        # reloads, but `preview.style` is reassigned on every reload, so a
+        # captured style object would go stale.
+        def click_gesture_for(preview)
           Gtk::GestureClick.new.tap do |gesture|
-            gesture.signal_connect("released") { open_tile(style) }
+            gesture.signal_connect("released") { open_tile(preview.style) }
           end
         end
 

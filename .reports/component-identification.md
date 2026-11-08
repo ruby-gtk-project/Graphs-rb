@@ -3,24 +3,17 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `fa994448` |
-| Port | `ruby` @ `42ff07f5` (this pass updates the two subsystem rows ported since `8930c5e3` — curve fitting and project load/save — the rest of this file was written against `8930c5e3` and is otherwise still accurate) |
+| Port | `ruby` @ `ce0ff04e` (this pass updates the rows for the style editor, the test_operations.py checks, and the app-metadata files — ported since `42ff07f5` — the rest of this file carries forward unchanged) |
 | Method | `.claude/skills/component-identification` applied by hand (file-level scan of both trees; `gir-symbols.sh`/`component-scan.sh` not run — see caveat below) |
 
-Caveat up front: this pass did not run `component-scan.sh` with a built
-`symbols.tsv` (that needs the fork's `nix develop` gir dump, which was spent on
-the runtime-gate recheck instead — see `test-parity.md`). What follows is a
-file-existence inventory, which is Step 1 of the skill (find the declarative
-UI / unit list) carried all the way to "does a port file exist at all", not
-the widget/CSS/signal/action table the skill asks for per surviving unit.
-**That table has not been built for a single ported file in this pass.**
-Treat every row below marked "Yes" as *a file exists*, not as *parity* —
-`component-parity.md` is where the four axes are actually checked, and it
-checks only three files in any depth.
+Caveat up front, carried forward unchanged: this pass did not run
+`component-scan.sh` with a built `symbols.tsv`. What follows is a
+file-existence inventory — Step 1 of the skill carried to "does a port file
+exist", not the widget/CSS/signal/action table the skill asks for per
+surviving unit. **That table is still not built for every ported file** —
+`component-parity.md` does it for the files actually tabled and says so.
 
-This supersedes `.reports/component-inventory.md` (written two commits ago,
-before the edit-item page, colour row and style manager landed) where they
-disagree. The old file also violates `accountability-ensurance` — see that
-report.
+This supersedes `.reports/component-inventory.md` where they disagree.
 
 ## Application shell
 
@@ -30,142 +23,123 @@ report.
 | `graphs/window.vala`, `data/ui/window.blp` | `lib/window.rb` | Yes |
 | `graphs/actions.vala` | `lib/actions.rb` | Yes |
 | `data/ui/window-shortcuts.blp` | `lib/shortcuts_dialog.rb` | Yes |
-| `graphs/settings.vala` + `data/se.sjoerd.Graphs.gschema.xml` | `lib/settings.rb` | **Partial** — no `.gschema.xml` on `ruby` at all; keys hand-re-implemented |
-| `data/se.sjoerd.Graphs.metainfo.xml.in`, `.desktop.in`, `.mime.xml`, `.service.in` | — | **Missing** |
+| `graphs/settings.vala` + `data/se.sjoerd.Graphs.gschema.xml` | `lib/settings.rb` + `data/org.rubygtkproject.Graphs.gschema.xml` | **Now Yes** — the gschema file was ported in `71decf49` (`glib-compile-schemas --strict` claimed, not re-verified in this pass — see "Checks not run" in `accountability-ensurance.md`) |
+| `data/se.sjoerd.Graphs.metainfo.xml.in`, `.desktop.in`, `.mime.xml`, `.service.in` | `data/org.rubygtkproject.Graphs.{metainfo.xml.in,desktop.in,mime.xml,service.in}` | **Now Yes, with a disclosed gap** — `71decf49`'s own commit message says the desktop file "drops the new-window/style-editor actions since those command-line flags aren't implemented by `lib/graphs/application.rb`." Confirmed: `lib/graphs/application.rb` has no `--new-window` or `--style-editor` CLI handling. This is a real, if small, behavioural gap (upstream's desktop actions let a user launch straight into the style editor from the app grid's right-click menu; the port's desktop file can't offer that because the app doesn't support it), disclosed in the commit message rather than hidden. |
 | `po/` (28 `.po` files, `POTFILES.in` listing 135 files) | — | **Missing** — see `translation-parity.md` |
-| `help/C/*.page` (11 help pages) + `help/<lang>/*.po` (translated help, dozens of languages) | — | **Missing** |
+| `help/C/*.page` (11 help pages) + `help/<lang>/*.po` | — | **Missing** |
 
 ## Canvas & figure
 
-| Upstream file(s) | Port path | Exists |
-|---|---|---|
-| `graphs/canvas/canvas.vala`, `graphs/canvas/canvas.py` | `lib/canvas.rb` | Yes |
-| `graphs/canvas/figure.py`, `artist.py`, `scales.py` | folded into `lib/canvas.rb` | Partial — not verified line-for-line |
-| `graphs/figure_settings.vala` + `data/ui/sidebar/figure-settings/settings-page.blp` | `lib/figure_settings.rb` | Yes |
-| `data/ui/sidebar/figure-settings/style-page.blp` | `lib/figure_settings.rb` / `lib/styles.rb` | Partial |
+Unchanged from the prior pass: `lib/canvas.rb` (folds `canvas.py`,
+`artist.py`, `figure.py`, `scales.py`, not verified line-for-line),
+`lib/figure_settings.rb`. Both **Yes**, both **Partial** on depth-of-check.
 
 ## Items (data series)
 
-All six item model files and the factory and base box are present and
-unchanged in shape since the last inventory: `lib/item/{base,data_item,
-equation_item,fill_item,generated_data_item,text_item,factory,data_holder}.rb`,
-`lib/item_box.rb`. **Yes** across the board.
+Unchanged: all six item model files + factory + base box + item box. **Yes**
+across the board.
 
 ## Sidebar — item editor (`sidebar/edit_item/*`)
 
-**Now ported** (was entirely missing in the prior inventory):
-
-| Upstream file(s) | Port path | Exists |
-|---|---|---|
-| `graphs/sidebar/edit_item/page.vala` | `lib/sidebar/edit_item/page.rb` | Yes |
-| `graphs/sidebar/edit_item/base_box.vala` | `lib/sidebar/edit_item/base_box.rb` | Yes |
-| `graphs/sidebar/edit_item/data_box.vala` | `lib/sidebar/edit_item/data_box.rb` | Yes |
-| `graphs/sidebar/edit_item/equation_box.vala` | `lib/sidebar/edit_item/equation_box.rb` | Yes |
-| `graphs/sidebar/edit_item/equation_group.vala` | `lib/sidebar/edit_item/equation_group.rb` | Yes |
-| `graphs/sidebar/edit_item/errorbar_group.vala` | `lib/sidebar/edit_item/errorbar_group.rb` | Yes |
-| `graphs/sidebar/edit_item/fill_box.vala` | `lib/sidebar/edit_item/fill_box.rb` | Yes |
-| `graphs/sidebar/edit_item/generated_data_box.vala` | `lib/sidebar/edit_item/generated_data_box.rb` | Yes |
-
-File existence only — no widget/CSS/signal table has been built for any of
-these eight files in this pass. `component-parity.md`'s driven check covers
-only the page title and "not empty", not the per-field bindings.
+Unchanged since the last inventory: all eight files present. **Yes**, file
+existence only.
 
 ## Sidebar — main page & operations
 
-`lib/main_sidebar_page.rb`, `lib/operations_panel.rb`, `lib/operations.rb` —
-Yes, as before.
+Unchanged: `lib/main_sidebar_page.rb`, `lib/operations_panel.rb`,
+`lib/operations.rb` — Yes.
 
 ## Dialogs
 
-All seven standalone dialogs (add-equation, add-fill, export-figure,
-export-items, generate-data, smoothen, transform) and all seven alert dialogs
-— Yes, as before.
-
-**Ported since the last pass (`8915152e`, `42ff07f5`):**
-
-| Upstream file(s) | Port path | Exists |
-|---|---|---|
-| `graphs/curve_fitting.vala`, `graphs/curve_fitting.py`, `data/ui/curve-fitting.blp`, `data/ui/fitting-parameters.blp` | `lib/curve_fitting_dialog.rb`, `lib/curve_fitting.rb` | **Now Yes** (was missing) — file exists, four-axis table not built (see `component-parity.md`); same unmarked-literal pattern confirmed at `lib/curve_fitting_dialog.rb:125,139,142,169,176,182,190,204,210,220,224,225,255,256` |
+Unchanged: all seven standalone dialogs and all seven alert dialogs — Yes.
+Curve fitting dialog — Yes (ported `42ff07f5`, carried forward).
 
 ## Colour widgets
 
-| Upstream file(s) | Port path | Exists |
-|---|---|---|
-| `graphs/color_button.vala` | `lib/color_button.rb` | Yes |
-| `graphs/color_swatch.vala` | `lib/color_swatch.rb` | Yes |
-| `graphs/color_row.vala`, `data/ui/color-row.blp` | `lib/color_row.rb` | **Now Yes** (was missing) |
+Unchanged: `lib/color_button.rb`, `lib/color_swatch.rb`, `lib/color_row.rb`
+— Yes.
 
-## Style editor (separate window)
-
-**Still entirely unported**, except the model layer:
+## Style editor (separate window) — **now ported, with two caveats**
 
 | Upstream file(s) | Port path | Exists |
 |---|---|---|
-| `graphs/style_editor/window.vala` | — | **Missing** |
-| `graphs/style_editor/add_style.vala` | — | **Missing** |
-| `graphs/style_editor/color_group.vala` | — | **Missing** |
-| `graphs/style_editor/editor_box.vala`/`.py` | — | **Missing** |
-| `graphs/style_editor/item_color_row.vala` | — | **Missing** |
-| `data/ui/style-editor/shortcuts.blp` | — | **Missing** |
-| `data/ui/style-preview.blp` | — | **Missing** |
-| `graphs/styles.vala`, `.py`, `style_io.py` | `lib/styles.rb` | Yes (model only) |
+| `graphs/style_editor/window.vala` | `lib/style_editor/window.rb` | **Now Yes** |
+| `graphs/style_editor/add_style.vala` | `lib/style_editor/add_style.rb` | **Now Yes** |
+| `graphs/style_editor/color_group.vala` | `lib/style_editor/color_group.rb` | **Now Yes** |
+| `graphs/style_editor/editor_box.vala`/`.py` | `lib/style_editor/editor_box.rb` | **Now Yes** |
+| `graphs/style_editor/item_color_row.vala` | `lib/style_editor/item_color_row.rb` | **Now Yes** |
+| `data/ui/style-editor/shortcuts.blp` | `lib/style_editor/shortcuts_dialog.rb` | **Now Yes** |
+| `data/ui/style-preview.blp` | `lib/style_preview.rb` | Yes (pre-existing) |
+| `graphs/styles.vala`, `.py`, `style_io.py` | `lib/styles.rb` | Yes (model, pre-existing) |
 
-The "style manager" driven in `drive_sidebar.rb` is `lib/styles.rb`'s
-`StyleManager` — the model. There is no window a user can open to add, edit
-or delete a style. This is a whole top-level window with no port file,
-reachable from the app's header-bar menu upstream.
+Caveat 1 — **disclosed, real behaviour gap**: `lib/style_editor/window.rb:21-23`
+says in its own class comment that upstream's adaptive `Adw.MultiLayoutView`
+(side-by-side on a wide window, a bottom sheet on a narrow one) "is
+simplified here to the side-by-side layout only." This is a genuine
+functional gap — a narrow-window user of the port never gets the
+bottom-sheet layout upstream gives them — named plainly in the code, not
+hidden behind a label, but still a gap to record here rather than let the
+file-existence "Yes" imply full parity.
 
-## File import
+Caveat 2 — **an unresolved binding-level crash reachable through this
+window**, documented in `.reports/style-editor-flowbox-drawingarea-gc.md`:
+rebuilding the style grid (`reload_grid`) a second time, with GC running at
+the wrong moment afterward, reproducibly segfaults or corrupts the
+process — not a Graphs-rb logic bug, a `ruby-gnome`/`gobject-introspection`
+binding gap around `Gtk::FlowBox#remove_all` + `Gtk::DrawingArea#set_draw_func`.
+`reload_grid` is called at build time and again on every `close_style` and
+every successful "Create Style…" — i.e., on the two most ordinary ways a
+user interacts with this window more than once per session. This is carried
+in detail in `test-parity.md` and `accountability-ensurance.md` because of
+what it implies about the drive script's green result, not re-derived here.
 
-**Still entirely unported** — dialog, controller, parsers (columns,
-spreadsheet, sql, xry, legacy project format), all ~9+ files. No `lib/
-file_import/` directory exists.
+## File import — **still entirely unported**
+
+Unchanged: dialog, controller, parsers (columns, spreadsheet, SQL, XRY,
+XRDML, legacy project format), all ~9+ files. No `lib/file_import/`
+directory exists. Confirmed again this pass (`find lib -iname '*import*'`
+returns nothing).
 
 ## Project load/save & legacy migration
 
-| Upstream file(s) | Port path | Exists |
-|---|---|---|
-| `graphs/project.vala`, `graphs/project.py` | `lib/project.rb` | **Now Yes** (was missing, ported in `8915152e`) — `Graphs::ProjectParseError` and save/open/undo-history round-trip exist, driven by `test/drive_window.rb` and now `spec/project_spec.rb` (5 examples, all passing — see `test-parity.md`) |
-| `graphs/migrate.py` | — | **Still Missing** |
-
-`lib/project.rb` raises `ProjectParseError` for a missing-keys and a
-newer-version project file (`spec/project_spec.rb:62,68`), so two of
-`lib/alert_dialogs.rb`'s triggers (`invalid-project`-shaped cases) now have a
-real caller. There is still no legacy `.graphs` v1 migration path at all —
-`graphs/migrate.py` is unported, `tests/project_v1.graphs` (upstream's
-migration fixture) was never copied into the port's `test/`, and the
-`beta-disallowed`/`legacy-migration-disallowed` alert dialogs still have no
-code path that raises them, since nothing in the port opens a legacy or beta
-project to disallow. `tests/test_migration.py` upstream (7 tests) pins
-exactly the missing code and none of it exists in the port.
+Unchanged: `lib/project.rb` — Yes (model), `graphs/migrate.py` — **Still
+Missing**. Confirmed again this pass (`find lib -iname '*migrat*'` returns
+nothing).
 
 ## Math parser & misc utilities
 
-Unchanged from the prior inventory: full pipeline ported
-(`lib/math_parser/{ast,lexer,parser,program,evaluator,printer,functions}.rb`),
-`lib/{utilities,enums,data,properties}.rb` present. "Partial — needs
-verification" on `math_parser/main.vala` coverage and `graphs/bindings.vala`
-vs `properties.rb`, unchanged.
+Unchanged from the prior inventory — full pipeline ported.
+
+## Non-widget data/config — **largely closed this pass**
+
+| Upstream file(s) | Port path | Exists |
+|---|---|---|
+| `data/se.sjoerd.Graphs.gschema.xml` | `data/org.rubygtkproject.Graphs.gschema.xml` | **Now Yes** |
+| `data/se.sjoerd.Graphs.{metainfo.xml.in,desktop.in,mime.xml,service.in}` | `data/org.rubygtkproject.Graphs.{...}` | **Now Yes** (desktop file gap noted above) |
+| `data/styles/*.mplstyle` (17 files) | `data/styles/*.mplstyle` | **Now Yes — all 17 filenames match upstream exactly**, confirmed by diff this pass; byte-for-byte content diff not run |
+| `data/style.css` | `lib/style.css` | Yes (present; byte-for-byte parity not checked) |
 
 ## Help / documentation
 
-No `help/` tree on `ruby`. Upstream ships 11 English help pages plus
-translated copies in dozens of languages via `help/<lang>/*.po`.
+Unchanged. No `help/` tree on `ruby`, confirmed again this pass.
+
+## Translations
+
+Unchanged. No `po/` directory, confirmed again this pass (`find . -iname
+'*.po'` → 0 files).
 
 ## Summary of what changed since the last inventory
 
-- **Closed since `8930c5e3`:** sidebar edit-item page + 7 boxes/groups,
-  colour row widget, the style manager driven by a test, the curve-fitting
-  dialog + its fitting-parameters sub-UI (`42ff07f5`), and project
-  load/save with `ProjectParseError` (`8915152e`).
-- **Still wide open, verified by file-existence, each a whole subsystem with
-  zero port files:** style editor window (6 files), file import (9+ files),
-  legacy-project migration (`graphs/migrate.py` — project *save/load* is now
-  ported, migration from the old pickle-based v1 format is not), GSettings
-  schema, app metadata (`.desktop`/`.metainfo`/`.mime`/`.service`), `po/` (28
-  languages), `help/` (11 pages + translations).
-- **Not attempted in this pass:** the widget/CSS/signal/action table for any
-  single file, upstream or port. `component-parity.md` below does this for
-  the four files the `ruby-gtk-testing` driver and `spec/` actually exercise
-  and stops there — the remaining ~20 ported files have never had their axes
-  compared.
+- **Closed this pass:** the whole style editor window subsystem (6 files),
+  app metadata (gschema/desktop/mime/service/metainfo), and the
+  `data/styles/*.mplstyle` preset files (all 17, name-complete).
+- **Opened this pass (new finding, not previously listed):** the style
+  editor's adaptive layout is disclosed-but-missing (side-by-side only), and
+  a real, reproducible, unresolved GTK-binding crash is reachable through
+  the window's ordinary "close and reopen a different style" / "create a
+  new style" flows.
+- **Still wide open, zero port files:** file import (9+ files), legacy
+  project migration (`graphs/migrate.py`), `help/` (11 pages + translations),
+  `po/` (28 languages).
+- **Not attempted in this pass, still:** the widget/CSS/signal/action table
+  for most ported files — `component-parity.md` tables a handful and says so.

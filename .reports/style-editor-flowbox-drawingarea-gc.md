@@ -28,6 +28,24 @@ widgets (anywhere in this codebase or elsewhere) would still be at risk,
 and the underlying binding gap below is unresolved and worth filing
 against `ruby-gnome/gobject-introspection` upstream — this report
 documents it for that purpose, but no issue has been filed from this
+
+**Addendum, added during this round's parity audit, not by the original
+author of this report:** that "future call site" risk is not only
+hypothetical or only elsewhere — `reload_grid`'s own new body still
+contains one. The sentence above, "only removes a tile whose style has
+actually disappeared," is accurate, and that removal
+(`flow_box.remove(previews.delete(name).widget)`, reached when a user
+deletes a style) destroys exactly the kind of `Gtk::DrawingArea`-backed
+widget this report's repro shows is at risk, and does so inside the same
+method this report credits with fixing the bug. `test/drive_style_editor.rb`
+never calls `confirm_delete`/`on_delete_response`, with or without GC
+pressure, so this path has no evidence either way. Read generously, the
+status line above ("mitigated in the port") is true for the *rebuild*
+path it was written about and tested against; read adversarially, a
+reader could take it to mean the whole method, which it does not cover.
+Recorded here so the next reader of this file sees it, not only in
+`accountability-ensurance.md`.
+
 session.
 
 ## Original summary

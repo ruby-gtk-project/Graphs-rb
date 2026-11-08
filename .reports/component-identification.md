@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `fa994448` |
-| Port | `ruby` @ `ce0ff04e` (this pass updates the rows for the style editor, the test_operations.py checks, and the app-metadata files — ported since `42ff07f5` — the rest of this file carries forward unchanged) |
+| Port | `ruby` @ `3a3d19c7` (this pass re-verifies everything below against the tree as it stands after the `reload_grid` crash-mitigation commit, and adds one finding the prior pass dropped: the figure-settings sidebar's style tab) |
 | Method | `.claude/skills/component-identification` applied by hand (file-level scan of both trees; `gir-symbols.sh`/`component-scan.sh` not run — see caveat below) |
 
 Caveat up front, carried forward unchanged: this pass did not run
@@ -33,6 +33,24 @@ This supersedes `.reports/component-inventory.md` where they disagree.
 Unchanged from the prior pass: `lib/canvas.rb` (folds `canvas.py`,
 `artist.py`, `figure.py`, `scales.py`, not verified line-for-line),
 `lib/figure_settings.rb`. Both **Yes**, both **Partial** on depth-of-check.
+
+**New finding this pass, not in any prior `component-identification.md`
+pass** (it was in the older, superseded `component-inventory.md` and got
+dropped when this file replaced it): upstream's
+`data/ui/sidebar/figure-settings/style-page.blp` — a dedicated
+`Adw.NavigationPage` ("Style") inside the figure-settings sidebar, holding a
+`GridView` of style-preview thumbnails plus a header "Manage" button wired
+to `action-name: "app.style-editor"` — has **no port file at all**.
+`lib/figure_settings.rb` (99 lines) has no `style_page`/`StylePage`
+method, class or navigation push, confirmed by `grep -n 'style_page\|StylePage\|style-grid\|style_grid' lib/*.rb` →
+only `lib/style.css` matches (a CSS rule, not a widget). The only route
+from inside the app to the style editor is the global "Styles…" app-menu
+item (`lib/main_sidebar_page.rb:224`, `app.style-editor`) — the quick,
+in-context "flip through my project's styles without leaving the sidebar"
+page upstream gives the user does not exist in the port at all. This is a
+real, user-facing navigation gap, not a cosmetic one: with the style editor
+window now ported (see below), this missing page is the one piece that
+would have connected it to the sidebar a user is actually looking at.
 
 ## Items (data series)
 
@@ -81,17 +99,27 @@ bottom-sheet layout upstream gives them — named plainly in the code, not
 hidden behind a label, but still a gap to record here rather than let the
 file-existence "Yes" imply full parity.
 
-Caveat 2 — **an unresolved binding-level crash reachable through this
-window**, documented in `.reports/style-editor-flowbox-drawingarea-gc.md`:
-rebuilding the style grid (`reload_grid`) a second time, with GC running at
-the wrong moment afterward, reproducibly segfaults or corrupts the
-process — not a Graphs-rb logic bug, a `ruby-gnome`/`gobject-introspection`
-binding gap around `Gtk::FlowBox#remove_all` + `Gtk::DrawingArea#set_draw_func`.
-`reload_grid` is called at build time and again on every `close_style` and
-every successful "Create Style…" — i.e., on the two most ordinary ways a
-user interacts with this window more than once per session. This is carried
-in detail in `test-parity.md` and `accountability-ensurance.md` because of
-what it implies about the drive script's green result, not re-derived here.
+Caveat 2 — **a binding-level crash reachable through this window, now
+mitigated in the port, root cause still open upstream**, documented in
+`.reports/style-editor-flowbox-drawingarea-gc.md` and fixed this pass by
+`3a3d19c7`: rebuilding the style grid (`reload_grid`) used to destroy every
+`StylePreview` tile with `Gtk::FlowBox#remove_all` and rebuild them from
+scratch, which — because each tile's `Gtk::DrawingArea#set_draw_func`
+closure is not kept rooted independently of the widget by
+gobject-introspection — reproducibly segfaulted or corrupted the process
+once GC ran before GTK's next frame tick. `reload_grid` now keeps each
+tile alive in a `@style_previews` hash keyed by style name and reuses it in
+place, only ever removing a tile whose style was actually deleted; nothing
+with a live `set_draw_func` closure is destroyed-then-GC'd on an ordinary
+rebuild any more. `test/drive_style_editor.rb` was extended to force
+`GC.start`, allocate pressure garbage, and call `reload_grid` five more
+times after the real rebuild, and the script still reaches `DRIVE OK`
+(reverified this pass). **This mitigates the port's own exposure to the
+bug; it does not fix `gobject-introspection` itself** — a future call site
+anywhere that still destroys-and-recreates `set_draw_func` widgets would
+still be at risk, and the report says so in its own words. See
+`test-parity.md` and `accountability-ensurance.md` for how this pass reads
+that distinction.
 
 ## File import — **still entirely unported**
 
@@ -130,16 +158,22 @@ Unchanged. No `po/` directory, confirmed again this pass (`find . -iname
 
 ## Summary of what changed since the last inventory
 
-- **Closed this pass:** the whole style editor window subsystem (6 files),
-  app metadata (gschema/desktop/mime/service/metainfo), and the
-  `data/styles/*.mplstyle` preset files (all 17, name-complete).
-- **Opened this pass (new finding, not previously listed):** the style
-  editor's adaptive layout is disclosed-but-missing (side-by-side only), and
-  a real, reproducible, unresolved GTK-binding crash is reachable through
-  the window's ordinary "close and reopen a different style" / "create a
-  new style" flows.
+- **Closed in earlier passes, reverified this pass:** the whole style
+  editor window subsystem (6 files), app metadata
+  (gschema/desktop/mime/service/metainfo), the `data/styles/*.mplstyle`
+  preset files (all 17, name-complete).
+- **Closed this pass:** the `reload_grid` crash is now mitigated in-port
+  (`3a3d19c7`) — see Caveat 2 above. The style editor's adaptive-layout gap
+  (side-by-side only, no bottom sheet) is unchanged and still open,
+  disclosed in code.
+- **New finding this pass** (recovered from the older, superseded
+  `component-inventory.md`, which had it and this file had dropped it):
+  the figure-settings sidebar's own `style-page.blp` — the in-context style
+  grid + "Manage" button — has no port file at all. See "Canvas & figure"
+  above.
 - **Still wide open, zero port files:** file import (9+ files), legacy
   project migration (`graphs/migrate.py`), `help/` (11 pages + translations),
-  `po/` (28 languages).
+  `po/` (28 languages), the figure-settings style-page tab (new finding,
+  above).
 - **Not attempted in this pass, still:** the widget/CSS/signal/action table
   for most ported files — `component-parity.md` tables a handful and says so.

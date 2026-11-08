@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `fa994448` |
-| Port | `ruby` @ `ce0ff04e` (rechecked this pass — `grep -rn '_(' lib/ \| wc -l` is still `0`, including in all six new style-editor files) |
+| Port | `ruby` @ `3a3d19c7` (rechecked this pass — `grep -rn '_(' lib/ \| wc -l` is still `0`; the only change between `ce0ff04e` and `3a3d19c7` is the `reload_grid` crash fix in `lib/style_editor/window.rb`, which touches no string literals, so the untranslated-string surface is unchanged in kind and count) |
 | Domain | `se.sjoerd.Graphs` upstream; `org.rubygtkproject.Graphs` on the port (confirmed by the new `data/org.rubygtkproject.Graphs.gschema.xml` etc., ported `71decf49`) |
 | Upstream messages | **~374** distinct `msgid`s (hand count, see caveat, unchanged from last pass) |
 | Upstream languages | **28** `.po` files under `po/` |

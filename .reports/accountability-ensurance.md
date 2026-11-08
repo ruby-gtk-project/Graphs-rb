@@ -3,10 +3,10 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `fa994448` |
-| Port | `ruby` @ `ce0ff04e` |
+| Port | `ruby` @ `3a3d19c7` |
 
 Scope grepped: `lib/`, `exe/`, `.reports/` (all five reports plus the
-carried-forward `component-inventory.md` and the new
+carried-forward `component-inventory.md` and
 `style-editor-flowbox-drawingarea-gc.md`), and `PORTING.md`/`FINDINGS.md`
 (neither exists on `ruby`, confirmed again this pass).
 
@@ -17,123 +17,136 @@ intentionally omitted|not ported|skipped|no ruby analogue|not needed|
 unnecessary for this port|simplified|streamlined' lib/ exe/ .reports/
 ```
 
-## Finding 1 — the round's most serious finding: a drive script's green result is real but was shaped around a known, unresolved crash
+## Finding 1 — the round's most serious finding: the crash fix's own claim is broader than what it actually covers
 
-This is the headline finding of this audit. It is **not** a case of a
-report claiming something false — every individual sentence in
-`.reports/style-editor-flowbox-drawingarea-gc.md` and in
-`test/drive_style_editor.rb`'s own behaviour is accurate. The problem is
-what the task's runtime-gate framing invites a reader to conclude from "36
-checks passed, 0 failed, covering 6 components" sitting next to that same
-report, read in isolation:
+The prior pass's Finding 1 was the `reload_grid` crash sitting behind a
+green gate. This pass, `3a3d19c7` genuinely fixes the specific mechanism
+that pass documented: `reload_grid` no longer destroys-and-recreates every
+tile on a rebuild, and re-running `test/drive_style_editor.rb` with five
+extra `GC.start`-forced reload cycles (well past the old two-call ceiling)
+confirms it, 38/38. That part of the story is real and I am not
+discounting it.
 
-- `test/drive_style_editor.rb` passes 36/36, confirmed by re-running it
-  this session.
-- `.reports/style-editor-flowbox-drawingarea-gc.md`, written by whoever
-  wrote that drive script, documents in its own words that the script
-  "exercises `reload_grid` exactly twice ... and deliberately runs nothing
-  allocation-heavy after that second call before the process quits — the
-  same ordering that is safe in isolation," and that this "does not
-  establish that the app, run interactively for longer with more such
-  cycles, is safe — the opposite is true."
-- The underlying defect — rebuilding the style grid's `FlowBox` of
-  `DrawingArea`-backed tiles a second time, with GC running at the wrong
-  moment, reproducibly segfaults or corrupts the process — reproduces with
-  **no Graphs-rb code at all**, per the report's own minimal repro, and is
-  reachable through two of the most ordinary things a user does with this
-  window: closing a style and opening another, or creating a new style
-  (which refreshes the grid) more than once per session.
+**But reading the fix past the part that was tested finds a second,
+narrower copy of the same bug class, left unverified.** `reload_grid`'s
+new body still does this, for any style that was actually deleted:
 
-**This is exactly what this task asked me to go looking for**: "Treat a
-failed or narrow drive run as a parity gap in its own right — a component
-no check exercises is unverified, not done." The drive run here is not
-merely narrow by omission — it is narrow *by deliberate design, to avoid
-triggering a documented crash*. A reader who sees "36/36, 6 components" and
-stops there would reasonably conclude the style editor works. It does not,
-reliably, under ordinary interactive use, and the one artifact proving that
-is a markdown file that nothing runs and nothing gates on.
+```ruby
+previews.each_key.to_a.each do |name|
+  unless current_names.include?(name)
+    flow_box.remove(previews.delete(name).widget)
+  end
+end
+```
 
-**Crucially, this is not a case of someone hiding the problem** — the
-report was written candidly, with a reproduction, by the same person who
-wrote the passing drive script, and it says outright that the drive
-script's own safety does not generalize. That is the right thing to do
-with a binding-level bug outside the port's control. But candor at the
-report level does not fix what happens when that report's finding is
-several files away from the number the task actually gates on. Filing this
-as Finding 1 here is what keeps it from being read as closed.
+`previews.delete(name).widget` is a `StylePreview` whose thumbnail is a
+`Gtk::DrawingArea` with a registered `set_draw_func` closure — the exact
+object shape `.reports/style-editor-flowbox-drawingarea-gc.md`'s minimal
+repro destroys to trigger the crash. `flow_box.remove` destroys it. The
+only thing that changed from the original bug is *how many* tiles get
+destroyed per call (one, via a user deleting a style, instead of all of
+them on every rebuild) — the destroy-then-pending-GC shape is still there.
+`confirm_delete`/`on_delete_response` (the only call sites that reach this
+line — `grep -n 'delete\|confirm_delete\|on_delete' test/drive_style_editor.rb`
+returns **no output at all**) is never driven by the drive script, with or
+without GC pressure. Deleting a style and then doing anything else that
+allocates — which is any ordinary continued use of the editor — is
+untested against exactly the mechanism this round's commit says it fixed.
+
+**This is not a claim that deleting a style crashes.** I did not run that
+sequence this session (a GC-triggered native crash is not something to
+provoke speculatively against the audit's own process), so I am not
+asserting a failure that wasn't observed. The finding is narrower and more
+exact than that: the commit message says "nothing with a `set_draw_func`
+closure is ever destroyed-then-GC'd as part of an ordinary rebuild any
+more" — and deleting a style *is* an ordinary thing a user does with this
+window, it does still destroy such a closure, and no check anywhere
+exercises it with the GC pressure that is the entire reason the original
+bug existed. A reader of the commit message and the green `DRIVE OK` who
+concludes the delete path is covered by the same proof would be wrong, and
+nothing in the current reports says so plainly until this one. This is
+filed as the round's most serious finding because it is exactly the
+false-green shape the task asks to be caught: a real, honest fix, whose
+own description is wider than its own test coverage, for a bug class
+proven to be a live native-process risk.
 
 **What I did about it, rather than only noting it**: nothing — no attempt
-was made to fix a `gobject-introspection` GC-rooting bug from this session,
-correctly, since the report already established no port-level workaround
-avoids it. This finding is left open and is reflected in `clean: false`,
-not papered over with a claim the gap is resolved.
+was made to extend `test/drive_style_editor.rb` to drive the delete path
+under GC pressure, and no attempt was made to trigger the crash directly.
+Both would be scope beyond auditing. This finding is left open and is
+reflected in `clean: false`.
 
 ## Finding 2 — the one-line excuses in `lib/` are, again, legitimate disclosures, not violations
 
-Re-grepped this pass, three hits in `lib/`/`exe/`:
+Re-grepped this pass against the current tree; same three hits as last
+pass, unchanged by the one commit between rounds (which touched only
+`lib/style_editor/window.rb`'s `reload_grid` body and comments, not these
+lines):
 
-- `lib/project.rb:15` — unchanged from last round, still a specific,
-  first-person admission naming what is missing (legacy migration), not a
-  label.
-- `lib/export_items.rb:76` — unchanged, ordinary business logic, not an
-  excuse.
-- `lib/style_editor/window.rb:23` — **new this pass**: "simplified here to
-  the side-by-side layout only" for the adaptive `Adw.MultiLayoutView`.
-  Read in context (quoted in full in `component-identification.md`), this
-  names the specific upstream behaviour (bottom-sheet layout on a narrow
-  window) that the port does not have, and names why (no Ruby GTK4 example
-  of `Adw.MultiLayoutView` to build against safely) rather than hiding
-  behind "out of scope" or "not needed." This is the register the skill
-  asks for. **It is still a real gap** — filed as one in
-  `component-identification.md` and `component-parity.md` — but it is not
-  an accountability violation; it is correctly disclosed.
+- `lib/project.rb:15` — still a specific, first-person admission naming
+  what is missing (legacy migration), not a label.
+- `lib/export_items.rb:76` — ordinary business logic ("an item that holds
+  neither data nor an equation is skipped"), not an excuse.
+- `lib/style_editor/window.rb:23` — "simplified here to the side-by-side
+  layout only" for the adaptive `Adw.MultiLayoutView`, naming the specific
+  missing upstream behaviour (bottom-sheet on a narrow window) and why (no
+  Ruby GTK4 example to build against safely). Still a real gap, filed in
+  `component-identification.md`/`component-parity.md`, not an
+  accountability violation.
 
-## Finding 3 — the commit message for the app-metadata port discloses a real, if small, feature drop, correctly
+## Finding 3 — a real gap this pass found that no prior pass's own summary carried: the figure-settings style-page tab
 
-`71decf49`'s own message: "the desktop file drops the new-window/
-style-editor actions since those command-line flags aren't implemented by
-`lib/graphs/application.rb`." Confirmed this pass:
-`lib/graphs/application.rb` has no `--new-window`/`--style-editor` CLI
-handling, so the desktop file's quick-launch actions for them would be
-dead entries if copied verbatim — dropping them instead of shipping a
-broken desktop action is the right call, disclosed plainly. Filed as a
-small gap in `component-identification.md`, not excused here.
+`component-identification.md`'s own "Summary" section, as of the prior
+pass, listed what was "still wide open" and did not mention
+`data/ui/sidebar/figure-settings/style-page.blp` — even though the
+file-level fact (no port file) was sitting, correctly recorded, in the
+older `component-inventory.md` the whole time. This is not a case of
+anyone writing something false; it is a gap dropping out of the
+*summary* of a report while the *detail* elsewhere stayed correct, which
+is its own kind of risk — a reader of just the current report's headline
+"what changed"/"what's still open" lines would not learn this gap exists
+at all. Restored this pass into `component-identification.md` and
+`component-parity.md`'s own summaries, with the file:line-equivalent
+evidence (the absence of any `style_page`/`StylePage` symbol in
+`lib/figure_settings.rb`).
 
-## Finding 4 — the runtime gate figure this round is narrower than the suite that exists, and I did not let the task's framing of it stand unexamined
+## Finding 4 — the runtime gate figure this round does not reproduce to the digit, and I am not forcing it to
 
-The task states this round's gate as `36 checks passed, 0 failed, covering
-6 components`. I re-ran it: it reproduces to the digit — it is
-`test/drive_style_editor.rb` alone. But the full suite that exists and
-passes on this tree is **277 checks** (29 rspec + 212 pre-existing drive
-checks + 36 new), and the prior round's own gate was `187 checks / 30
-components` (itself unreconciled against this session's 179-recount, see
-the prior report). **The task's own framing this round — quoting only the
-newest 36 — is consistent with "the round's new work," but taken alone it
-undercounts the port's actual tested surface by roughly 8x, and (more
-importantly, per Finding 1) it is also the one subsystem whose green result
-has a documented reason not to trust it beyond the exact 36 assertions it
-makes.** I am naming this rather than either (a) reporting 277 as if it
-were this round's gate, which would overstate what the task asked me to
-verify, or (b) reporting 36 as if it certified the style editor, which
-Finding 1 shows it does not.
+The task states this round's gate as `248 checks passed, 0 failed,
+covering 8 components`. Re-running everything this session: `8` matches
+cleanly if "components" means test files (5 drive scripts + 3 spec
+files). `248` does not reproduce by any counting method tried —
+counting every printed `ok`/passing-example line gives 279 (29 rspec + 20
++ 28 + 47 + 117 + 38 drive); counting literal `check(` call sites in the
+drive scripts plus rspec's 29 gives 233. Neither is 248, and the two
+methods don't even agree with each other, which is itself worth recording
+rather than picking whichever is closer and calling it reconciled. What
+*does* reproduce exactly and matters more than the digit: `drive_ok=true`
+and `0 failures`, confirmed by re-running all 8 files this session with no
+`FAILURES`/non-zero-exit anywhere. I am reporting the mismatch rather than
+rounding either number to fit the other.
 
 ## What this report is not claiming
 
 This report does not find a fabricated test, a result asserted without
 being run, or a report that lies about what it tested. Every drive script
-and every spec I re-ran this session passed exactly as its own report
-claims. The failures here are at a different level: a real crash that a
-real, honest report documents, sitting one file away from a runtime-gate
-number that — read in isolation, the way the task's own prompt frames it —
-would let a reader believe the opposite. That is the shape of risk this
-skill exists to catch, even when no single sentence anywhere is false.
+and every spec re-run this session passed exactly as claimed, and the
+`reload_grid` fix is a real fix for the mechanism it names. Finding 1 is
+narrower than "the crash is back" — it is "the fix's own description
+covers more ground than its own test does," which is a more exact and, I
+think, more useful finding than either overstating the regression or
+accepting the green result at face value.
 
 ## Rules check
 
 - No gap above is excused with a construction from the grep list.
 - Finding 1 is reported as the most serious finding in this round, per the
-  task's own instruction that a false-green risk is the most serious kind.
-- Findings 2-3's disclosed-gap language is explicitly *not* treated as a
-  violation, with the specific sentence quoted and why it clears the bar.
-- Finding 4's number is reported as narrower-but-accurate, not rounded up
-  to the full suite's count or left unexamined as the task's own framing.
+  task's own instruction that a false-green risk is the most serious kind,
+  and is stated precisely (an untested residual case, not an observed
+  crash) rather than either downgraded to a style nit or inflated into an
+  unverified crash claim.
+- Finding 3 names a report-summary accuracy gap distinct from a code gap,
+  and fixes it in the two reports it affects rather than only noting it
+  here.
+- Finding 4's mismatch is reported as a mismatch, not rounded to match the
+  task's stated figure or silently dropped.
